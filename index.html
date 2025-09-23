@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EOEL Hawaii Early Childhood Dashboard</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f7fa;
+            color: #333;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1rem 2rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            font-size: 1.8rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 1rem;
+        }
+
+        .dashboard-container {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            height: calc(100vh - 120px);
+            gap: 1rem;
+            padding: 1rem;
+        }
+
+        .sidebar {
+            background: white;
+            border-radius: 8px;
+            padding: 1.5rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow-y: auto;
+        }
+
+        .filter-section {
+            margin-bottom: 2rem;
+        }
+
+        .filter-section h3 {
+            color: #4a5568;
+            margin-bottom: 1rem;
+            font-size: 1.1rem;
+            border-bottom: 2px solid #e2e8f0;
+            padding-bottom: 0.5rem;
+        }
+
+        .filter-group {
+            margin-bottom: 1rem;
+        }
+
+        .filter-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            color: #2d3748;
+        }
+
+        .filter-group select,
+        .filter-group input {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid #cbd5e0;
+            border-radius: 4px;
+            font-size: 0.9rem;
+        }
+
+        .filter-group select:focus,
+        .filter-group input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.1);
+        }
+
+        .stats-panel {
+            background: #f7fafc;
+            padding: 1rem;
+            border-radius: 6px;
+            margin-bottom: 1rem;
+        }
+
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .stat-label {
+            color: #4a5568;
+            font-size: 0.9rem;
+        }
+
+        .stat-value {
+            font-weight: bold;
+            color: #2d3748;
+        }
+
+        .export-section {
+            border-top: 1px solid #e2e8f0;
+            padding-top: 1rem;
+            margin-top: 1rem;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 0.75rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 500;
+            width: 100%;
+            margin-bottom: 0.5rem;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+        }
+
+        .map-container {
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            position: relative;
+        }
+
+        #map {
+            height: 100%;
+            min-height: 500px;
+        }
+
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255,255,255,0.9);
+            padding: 2rem;
+            border-radius: 8px;
+            text-align: center;
+            z-index: 1000;
+        }
+
+        .data-table-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 2000;
+            backdrop-filter: blur(4px);
+        }
+
+        .modal-content {
+            background: white;
+            margin: 2% auto;
+            padding: 2rem;
+            border-radius: 8px;
+            width: 90%;
+            height: 90%;
+            overflow: auto;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .close {
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: #a0aec0;
+        }
+
+        .close:hover {
+            color: #2d3748;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+        }
+
+        .data-table th,
+        .data-table td {
+            padding: 0.5rem;
+            text-align: left;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .data-table th {
+            background: #f7fafc;
+            font-weight: 600;
+            color: #4a5568;
+            position: sticky;
+            top: 0;
+        }
+
+        .data-table tr:hover {
+            background: #f7fafc;
+        }
+
+        @media (max-width: 768px) {
+            .dashboard-container {
+                grid-template-columns: 1fr;
+                grid-template-rows: auto 1fr;
+            }
+            
+            .sidebar {
+                max-height: 300px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🌺 EOEL Hawaii Early Childhood Dashboard</h1>
+        <p>Interactive mapping and analysis of Hawaii's early childhood programs</p>
+    </div>
+
+    <div class="dashboard-container">
+        <div class="sidebar">
+            <div class="filter-section">
+                <h3>🎯 Filters</h3>
+                
+                <div class="filter-group">
+                    <label for="complexArea">Complex Area:</label>
+                    <select id="complexArea">
+                        <option value="">All Areas</option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <label for="prekStatus">Pre-K Status:</label>
+                    <select id="prekStatus">
+                        <option value="">All Status</option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <label for="militaryImpacted">Military Impacted:</label>
+                    <select id="militaryImpacted">
+                        <option value="">All</option>
+                        <option value="Yes">Yes</option>
+                        <option value="No">No</option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <label for="titleI">Title I Status:</label>
+                    <select id="titleI">
+                        <option value="">All</option>
+                        <option value="Yes">Title I</option>
+                        <option value="No">Non-Title I</option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <label for="utilizationFilter">Site Utilization:</label>
+                    <select id="utilizationFilter">
+                        <option value="">All Levels</option>
+                        <option value="low">< 60%</option>
+                        <option value="medium">60% - 85%</option>
+                        <option value="high">> 85%</option>
+                    </select>
+                </div>
+
+                <button class="btn" onclick="applyFilters()">Apply Filters</button>
+                <button class="btn btn-secondary" onclick="clearFilters()">Clear All</button>
+            </div>
+
+            <div class="stats-panel">
+                <h3>📊 Current View Stats</h3>
+                <div class="stat-item">
+                    <span class="stat-label">Total Schools:</span>
+                    <span class="stat-value" id="totalSchools">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">EOEL Programs:</span>
+                    <span class="stat-value" id="eoelCount">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Avg Utilization:</span>
+                    <span class="stat-value" id="avgUtilization">0%</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Military Impacted:</span>
+                    <span class="stat-value" id="militaryCount">0</span>
+                </div>
+            </div>
+
+            <div class="export-section">
+                <h3>📋 Data Export</h3>
+                <button class="btn" onclick="showDataTable()">View Data Table</button>
+                <button class="btn btn-secondary" onclick="exportToCSV()">Export to CSV</button>
+                <button class="btn" onclick="showCustomExport()">Custom Dataset</button>
+            </div>
+        </div>
+
+        <div class="map-container">
+            <div class="loading" id="loading">
+                <div>🗺️ Loading Hawaii schools...</div>
+            </div>
+            <div id="map"></div>
+        </div>
+    </div>
+
+    <!-- Data Table Modal -->
+    <div id="dataTableModal" class="data-table-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>📊 School Data Table</h2>
+                <span class="close" onclick="closeDataTable()">&times;</span>
+            </div>
+            <div id="tableContainer">
+                <table class="data-table" id="dataTable">
+                    <thead id="tableHead"></thead>
+                    <tbody id="tableBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Leaflet JavaScript -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+
+    <script>
+        // Global variables
+        let map;
+        let schoolsData = [];
+        let filteredData = [];
+        let markers = [];
+
+        // Sample data - replace with your CSV data
+        const sampleSchools = [
+            {
+                nameofschool: "Aiea Elementary School",
+                zipcode: "96701",
+                complexarea: "Pearl City-Aiea",
+                prekstatusofnoneoelschools: "Has Pre-K",
+                militaryimpacted: "Yes",
+                titlei2425: "Yes",
+                siteutilization: "78%",
+                currentenrollmentsy2324: 450,
+                sitecapacity: 575,
+                eoelfundedfciloncampus: "Yes",
+                lat: 21.3845,
+                lng: -157.9284
+            },
+            {
+                nameofschool: "Kailua Elementary School",
+                zipcode: "96734",
+                complexarea: "Kailua-Kalaheo",
+                prekstatusofnoneoelschools: "No Pre-K",
+                militaryimpacted: "No",
+                titlei2425: "No",
+                siteutilization: "92%",
+                currentenrollmentsy2324: 385,
+                sitecapacity: 420,
+                eoelfundedfciloncampus: "No",
+                lat: 21.4022,
+                lng: -157.7394
+            },
+            {
+                nameofschool: "Waianae Elementary School",
+                zipcode: "96792",
+                complexarea: "Waianae",
+                prekstatusofnoneoelschools: "Has Pre-K",
+                militaryimpacted: "No",
+                titlei2425: "Yes",
+                siteutilization: "65%",
+                currentenrollmentsy2324: 520,
+                sitecapacity: 800,
+                eoelfundedfciloncampus: "Yes",
+                lat: 21.4389,
+                lng: -158.1867
+            },
+            {
+                nameofschool: "Mililani Elementary School",
+                zipcode: "96789",
+                complexarea: "Mililani-Waipio-Melemanu",
+                prekstatusofnoneoelschools: "Has Pre-K",
+                militaryimpacted: "Yes",
+                titlei2425: "No",
+                siteutilization: "88%",
+                currentenrollmentsy2324: 642,
+                sitecapacity: 730,
+                eoelfundedfciloncampus: "Yes",
+                lat: 21.4511,
+                lng: -158.0156
+            },
+            {
+                nameofschool: "Hilo Elementary School",
+                zipcode: "96720",
+                complexarea: "Hilo-Waiakea",
+                prekstatusofnoneoelschools: "Has Pre-K",
+                militaryimpacted: "No",
+                titlei2425: "Yes",
+                siteutilization: "71%",
+                currentenrollmentsy2324: 355,
+                sitecapacity: 500,
+                eoelfundedfciloncampus: "No",
+                lat: 19.7297,
+                lng: -155.0890
+            }
+        ];
+
+        // Initialize the dashboard
+        function initDashboard() {
+            // Load sample data (replace with CSV loading logic)
+            schoolsData = sampleSchools;
+            filteredData = [...schoolsData];
+            
+            // Initialize map
+            initMap();
+            
+            // Populate filter dropdowns
+            populateFilters();
+            
+            // Display initial data
+            displayMarkers();
+            updateStats();
+            
+            // Hide loading
+            document.getElementById('loading').style.display = 'none';
+        }
+
+        // Initialize Leaflet map centered on Hawaii
+        function initMap() {
+            map = L.map('map').setView([21.3099, -157.8581], 8);
+            
+            // Add OpenStreetMap tiles
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(map);
+        }
+
+        // Populate filter dropdowns with unique values
+        function populateFilters() {
+            const complexAreas = [...new Set(schoolsData.map(school => school.complexarea))].sort();
+            const prekStatuses = [...new Set(schoolsData.map(school => school.prekstatusofnoneoelschools))].sort();
+            
+            populateSelect('complexArea', complexAreas);
+            populateSelect('prekStatus', prekStatuses);
+        }
+
+        function populateSelect(selectId, options) {
+            const select = document.getElementById(selectId);
+            options.forEach(option => {
+                const optionElement = document.createElement('option');
+                optionElement.value = option;
+                optionElement.textContent = option;
+                select.appendChild(optionElement);
+            });
+        }
+
+        // Display school markers on map
+        function displayMarkers() {
+            // Clear existing markers
+            markers.forEach(marker => map.removeLayer(marker));
+            markers = [];
+            
+            // Add new markers
+            filteredData.forEach(school => {
+                const marker = L.marker([school.lat, school.lng])
+                    .bindPopup(createPopupContent(school))
+                    .addTo(map);
+                
+                markers.push(marker);
+            });
+        }
+
+        // Create popup content for school markers
+        function createPopupContent(school) {
+            const utilization = parseFloat(school.siteutilization) || 0;
+            const utilizationColor = utilization > 85 ? '#48bb78' : utilization > 60 ? '#ed8936' : '#e53e3e';
+            
+            return `
+                <div style="min-width: 200px;">
+                    <h4 style="margin-bottom: 0.5rem; color: #2d3748;">${school.nameofschool}</h4>
+                    <div style="margin-bottom: 0.3rem;"><strong>Complex Area:</strong> ${school.complexarea}</div>
+                    <div style="margin-bottom: 0.3rem;"><strong>ZIP Code:</strong> ${school.zipcode}</div>
+                    <div style="margin-bottom: 0.3rem;"><strong>Pre-K Status:</strong> ${school.prekstatusofnoneoelschools}</div>
+                    <div style="margin-bottom: 0.3rem;"><strong>EOEL Program:</strong> ${school.eoelfundedfciloncampus}</div>
+                    <div style="margin-bottom: 0.3rem;"><strong>Military Impacted:</strong> ${school.militaryimpacted}</div>
+                    <div style="margin-bottom: 0.3rem;"><strong>Title I:</strong> ${school.titlei2425}</div>
+                    <div style="margin-bottom: 0.3rem;">
+                        <strong>Utilization:</strong> 
+                        <span style="color: ${utilizationColor}; font-weight: bold;">${school.siteutilization}</span>
+                    </div>
+                    <div><strong>Enrollment:</strong> ${school.currentenrollmentsy2324} / ${school.sitecapacity}</div>
+                </div>
+            `;
+        }
+
+        // Apply filters
+        function applyFilters() {
+            const complexArea = document.getElementById('complexArea').value;
+            const prekStatus = document.getElementById('prekStatus').value;
+            const militaryImpacted = document.getElementById('militaryImpacted').value;
+            const titleI = document.getElementById('titleI').value;
+            const utilizationFilter = document.getElementById('utilizationFilter').value;
+            
+            filteredData = schoolsData.filter(school => {
+                // Complex area filter
+                if (complexArea && school.complexarea !== complexArea) return false;
+                
+                // Pre-K status filter
+                if (prekStatus && school.prekstatusofnoneoelschools !== prekStatus) return false;
+                
+                // Military impacted filter
+                if (militaryImpacted && school.militaryimpacted !== militaryImpacted) return false;
+                
+                // Title I filter
+                if (titleI && school.titlei2425 !== titleI) return false;
+                
+                // Utilization filter
+                if (utilizationFilter) {
+                    const utilization = parseFloat(school.siteutilization) || 0;
+                    if (utilizationFilter === 'low' && utilization >= 60) return false;
+                    if (utilizationFilter === 'medium' && (utilization < 60 || utilization > 85)) return false;
+                    if (utilizationFilter === 'high' && utilization <= 85) return false;
+                }
+                
+                return true;
+            });
+            
+            displayMarkers();
+            updateStats();
+        }
+
+        // Clear all filters
+        function clearFilters() {
+            document.getElementById('complexArea').value = '';
+            document.getElementById('prekStatus').value = '';
+            document.getElementById('militaryImpacted').value = '';
+            document.getElementById('titleI').value = '';
+            document.getElementById('utilizationFilter').value = '';
+            
+            filteredData = [...schoolsData];
+            displayMarkers();
+            updateStats();
+        }
+
+        // Update statistics panel
+        function updateStats() {
+            const totalSchools = filteredData.length;
+            const eoelCount = filteredData.filter(school => school.eoelfundedfciloncampus === 'Yes').length;
+            const militaryCount = filteredData.filter(school => school.militaryimpacted === 'Yes').length;
+            
+            const avgUtilization = filteredData.length > 0 ? 
+                filteredData.reduce((sum, school) => sum + (parseFloat(school.siteutilization) || 0), 0) / filteredData.length : 0;
+            
+            document.getElementById('totalSchools').textContent = totalSchools;
+            document.getElementById('eoelCount').textContent = eoelCount;
+            document.getElementById('avgUtilization').textContent = avgUtilization.toFixed(1) + '%';
+            document.getElementById('militaryCount').textContent = militaryCount;
+        }
+
+        // Show data table modal
+        function showDataTable() {
+            const modal = document.getElementById('dataTableModal');
+            const tableHead = document.getElementById('tableHead');
+            const tableBody = document.getElementById('tableBody');
+            
+            // Clear existing content
+            tableHead.innerHTML = '';
+            tableBody.innerHTML = '';
+            
+            if (filteredData.length === 0) {
+                tableBody.innerHTML = '<tr><td colspan="100%">No data matches current filters</td></tr>';
+                modal.style.display = 'block';
+                return;
+            }
+            
+            // Create header row
+            const headers = ['School Name', 'Complex Area', 'ZIP', 'Pre-K Status', 'EOEL Program', 'Military', 'Title I', 'Utilization', 'Enrollment'];
+            const headerRow = document.createElement('tr');
+            headers.forEach(header => {
+                const th = document.createElement('th');
+                th.textContent = header;
+                headerRow.appendChild(th);
+            });
+            tableHead.appendChild(headerRow);
+            
+            // Create data rows
+            filteredData.forEach(school => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${school.nameofschool}</td>
+                    <td>${school.complexarea}</td>
+                    <td>${school.zipcode}</td>
+                    <td>${school.prekstatusofnoneoelschools}</td>
+                    <td>${school.eoelfundedfciloncampus}</td>
+                    <td>${school.militaryimpacted}</td>
+                    <td>${school.titlei2425}</td>
+                    <td>${school.siteutilization}</td>
+                    <td>${school.currentenrollmentsy2324} / ${school.sitecapacity}</td>
+                `;
+                tableBody.appendChild(row);
+            });
+            
+            modal.style.display = 'block';
+        }
+
+        // Close data table modal
+        function closeDataTable() {
+            document.getElementById('dataTableModal').style.display = 'none';
+        }
+
+        // Export filtered data to CSV
+        function exportToCSV() {
+            if (filteredData.length === 0) {
+                alert('No data to export. Please adjust your filters.');
+                return;
+            }
+            
+            const headers = Object.keys(filteredData[0]);
+            const csvContent = [
+                headers.join(','),
+                ...filteredData.map(row => headers.map(header => `"${row[header] || ''}"`).join(','))
+            ].join('\n');
+            
+            const blob = new Blob([csvContent], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `eoel_schools_${new Date().toISOString().split('T')[0]}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // Show custom export options (placeholder for future development)
+        function showCustomExport() {
+            alert('Custom dataset builder coming soon! This will let you select specific fields and create custom reports.');
+        }
+
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            const modal = document.getElementById('dataTableModal');
+            if (event.target === modal) {
+                closeDataTable();
+            }
+        }
+
+        // Initialize dashboard when page loads
+        document.addEventListener('DOMContentLoaded', initDashboard);
+    </script>
+</body>
+</html>
