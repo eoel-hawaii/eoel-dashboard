@@ -331,10 +331,12 @@
             </div>
 
             <div class="export-section">
-                <h3>📋 Data Export</h3>
+                <h3>🎯 Stakeholder Tools</h3>
                 <button class="btn" onclick="showDataTable()">View Data Table</button>
-                <button class="btn btn-secondary" onclick="exportToCSV()">Export to CSV</button>
-                <button class="btn" onclick="showCustomExport()">Custom Dataset</button>
+                <button class="btn" onclick="generatePresentationView()">📊 Presentation Mode</button>
+                <button class="btn btn-secondary" onclick="showCustomDataBuilder()">🔧 Build Custom Dataset</button>
+                <button class="btn btn-secondary" onclick="shareCurrentView()">📤 Share This View</button>
+                <button class="btn" onclick="exportToCSV()">📁 Export to CSV</button>
             </div>
         </div>
 
@@ -358,6 +360,82 @@
                     <thead id="tableHead"></thead>
                     <tbody id="tableBody"></tbody>
                 </table>
+            </div>
+        </div>
+    </div>
+    <div id="customDataModal" class="data-table-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>🔧 Build Custom Dataset for Stakeholders</h2>
+                <span class="close" onclick="closeCustomDataBuilder()">&times;</span>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+                <div>
+                    <h3>Select Fields to Include:</h3>
+                    <div id="fieldSelector" style="max-height: 400px; overflow-y: auto; border: 1px solid #e2e8f0; padding: 1rem; border-radius: 6px;">
+                        <!-- Fields will be populated dynamically -->
+                    </div>
+                    <div style="margin-top: 1rem;">
+                        <button class="btn" onclick="selectAllFields()">Select All</button>
+                        <button class="btn btn-secondary" onclick="clearAllFields()">Clear All</button>
+                    </div>
+                </div>
+                <div>
+                    <h3>Preview & Export:</h3>
+                    <div style="margin-bottom: 1rem;">
+                        <label>Dataset Name:</label>
+                        <input type="text" id="datasetName" placeholder="e.g. Title I Schools Analysis" style="width: 100%; padding: 0.5rem; margin-top: 0.5rem;">
+                    </div>
+                    <div style="margin-bottom: 1rem;">
+                        <label>Add Notes:</label>
+                        <textarea id="datasetNotes" placeholder="Context for stakeholders..." style="width: 100%; padding: 0.5rem; height: 100px; margin-top: 0.5rem;"></textarea>
+                    </div>
+                    <div style="background: #f7fafc; padding: 1rem; border-radius: 6px; margin-bottom: 1rem;">
+                        <strong>Current Selection:</strong>
+                        <div id="selectionSummary">No fields selected</div>
+                    </div>
+                    <button class="btn" onclick="generateCustomDataset()">📊 Generate Dataset</button>
+                    <button class="btn btn-secondary" onclick="previewCustomData()">👁️ Preview Table</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Presentation Mode Modal -->
+    <div id="presentationModal" class="data-table-modal">
+        <div class="modal-content" style="width: 95%; height: 95%;">
+            <div class="modal-header">
+                <h2>📊 Stakeholder Presentation View</h2>
+                <div>
+                    <button class="btn" onclick="printPresentation()" style="margin-right: 1rem;">🖨️ Print</button>
+                    <span class="close" onclick="closePresentationMode()">&times;</span>
+                </div>
+            </div>
+            <div id="presentationContent">
+                <!-- Presentation content will be generated here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Share View Modal -->
+    <div id="shareModal" class="data-table-modal">
+        <div class="modal-content" style="max-width: 600px; height: auto;">
+            <div class="modal-header">
+                <h2>📤 Share Current View</h2>
+                <span class="close" onclick="closeShareModal()">&times;</span>
+            </div>
+            <div>
+                <p style="margin-bottom: 1rem; color: #4a5568;">Share this filtered view with stakeholders:</p>
+                <div style="background: #f7fafc; padding: 1rem; border-radius: 6px; margin-bottom: 1rem;">
+                    <label style="display: block; margin-bottom: 0.5rem; font-weight: bold;">Shareable URL:</label>
+                    <input type="text" id="shareURL" readonly style="width: 100%; padding: 0.5rem; background: white;" onclick="this.select()">
+                    <button class="btn" onclick="copyShareURL()" style="margin-top: 0.5rem; width: auto; padding: 0.5rem 1rem;">📋 Copy Link</button>
+                </div>
+                <div style="margin-bottom: 1rem;">
+                    <label style="display: block; margin-bottom: 0.5rem; font-weight: bold;">Email Template:</label>
+                    <textarea id="emailTemplate" style="width: 100%; height: 120px; padding: 0.5rem;" readonly></textarea>
+                    <button class="btn btn-secondary" onclick="copyEmailTemplate()" style="margin-top: 0.5rem; width: auto; padding: 0.5rem 1rem;">📧 Copy Email</button>
+                </div>
             </div>
         </div>
     </div>
@@ -671,9 +749,330 @@
             URL.revokeObjectURL(url);
         }
 
-        // Show custom export options (placeholder for future development)
-        function showCustomExport() {
-            alert('Custom dataset builder coming soon! This will let you select specific fields and create custom reports.');
+        // Generate presentation view for stakeholders
+        function generatePresentationView() {
+            const modal = document.getElementById('presentationModal');
+            const content = document.getElementById('presentationContent');
+            
+            // Get current filter state for context
+            const activeFilters = [];
+            const complexArea = document.getElementById('complexArea').value;
+            const prekStatus = document.getElementById('prekStatus').value;
+            const militaryImpacted = document.getElementById('militaryImpacted').value;
+            const titleI = document.getElementById('titleI').value;
+            const utilizationFilter = document.getElementById('utilizationFilter').value;
+            
+            if (complexArea) activeFilters.push(`Complex Area: ${complexArea}`);
+            if (prekStatus) activeFilters.push(`Pre-K Status: ${prekStatus}`);
+            if (militaryImpacted) activeFilters.push(`Military Impacted: ${militaryImpacted}`);
+            if (titleI) activeFilters.push(`Title I: ${titleI}`);
+            if (utilizationFilter) activeFilters.push(`Utilization: ${utilizationFilter}`);
+            
+            // Calculate key metrics
+            const totalSchools = filteredData.length;
+            const eoelCount = filteredData.filter(school => school.eoelfundedfciloncampus === 'Yes').length;
+            const militaryCount = filteredData.filter(school => school.militaryimpacted === 'Yes').length;
+            const titleICount = filteredData.filter(school => school.titlei2425 === 'Yes').length;
+            const avgUtilization = filteredData.length > 0 ? 
+                filteredData.reduce((sum, school) => sum + (parseFloat(school.siteutilization) || 0), 0) / filteredData.length : 0;
+            
+            // Group by complex area for breakdown
+            const areaBreakdown = {};
+            filteredData.forEach(school => {
+                if (!areaBreakdown[school.complexarea]) {
+                    areaBreakdown[school.complexarea] = { count: 0, eoel: 0, military: 0, titleI: 0, totalUtilization: 0 };
+                }
+                areaBreakdown[school.complexarea].count++;
+                if (school.eoelfundedfciloncampus === 'Yes') areaBreakdown[school.complexarea].eoel++;
+                if (school.militaryimpacted === 'Yes') areaBreakdown[school.complexarea].military++;
+                if (school.titlei2425 === 'Yes') areaBreakdown[school.complexarea].titleI++;
+                areaBreakdown[school.complexarea].totalUtilization += parseFloat(school.siteutilization) || 0;
+            });
+            
+            content.innerHTML = `
+                <div style="padding: 2rem; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
+                    <div style="text-align: center; margin-bottom: 2rem; border-bottom: 2px solid #667eea; padding-bottom: 1rem;">
+                        <h1 style="color: #2d3748; margin-bottom: 0.5rem;">Hawaii Early Childhood Education Overview</h1>
+                        <p style="color: #4a5568; font-size: 1.1rem;">EOEL Dashboard Analysis • Generated ${new Date().toLocaleDateString()}</p>
+                        ${activeFilters.length > 0 ? `<p style="color: #667eea; font-style: italic;">Filtered by: ${activeFilters.join(', ')}</p>` : ''}
+                    </div>
+                    
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
+                        <div style="background: linear-gradient(135deg, #667eea, #764ba2); color: white; padding: 1.5rem; border-radius: 8px; text-align: center;">
+                            <div style="font-size: 2.5rem; font-weight: bold; margin-bottom: 0.5rem;">${totalSchools}</div>
+                            <div style="font-size: 1rem; opacity: 0.9;">Total Schools</div>
+                        </div>
+                        <div style="background: linear-gradient(135deg, #48bb78, #38a169); color: white; padding: 1.5rem; border-radius: 8px; text-align: center;">
+                            <div style="font-size: 2.5rem; font-weight: bold; margin-bottom: 0.5rem;">${eoelCount}</div>
+                            <div style="font-size: 1rem; opacity: 0.9;">EOEL Programs</div>
+                        </div>
+                        <div style="background: linear-gradient(135deg, #ed8936, #dd6b20); color: white; padding: 1.5rem; border-radius: 8px; text-align: center;">
+                            <div style="font-size: 2.5rem; font-weight: bold; margin-bottom: 0.5rem;">${avgUtilization.toFixed(0)}%</div>
+                            <div style="font-size: 1rem; opacity: 0.9;">Avg Utilization</div>
+                        </div>
+                        <div style="background: linear-gradient(135deg, #9f7aea, #805ad5); color: white; padding: 1.5rem; border-radius: 8px; text-align: center;">
+                            <div style="font-size: 2.5rem; font-weight: bold; margin-bottom: 0.5rem;">${militaryCount}</div>
+                            <div style="font-size: 1rem; opacity: 0.9;">Military Impacted</div>
+                        </div>
+                    </div>
+                    
+                    <div style="margin-bottom: 2rem;">
+                        <h2 style="color: #2d3748; margin-bottom: 1rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.5rem;">Complex Area Breakdown</h2>
+                        <div style="overflow-x: auto;">
+                            <table style="width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+                                <thead style="background: #f7fafc;">
+                                    <tr>
+                                        <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #e2e8f0;">Complex Area</th>
+                                        <th style="padding: 1rem; text-align: center; border-bottom: 1px solid #e2e8f0;">Schools</th>
+                                        <th style="padding: 1rem; text-align: center; border-bottom: 1px solid #e2e8f0;">EOEL Programs</th>
+                                        <th style="padding: 1rem; text-align: center; border-bottom: 1px solid #e2e8f0;">Military Impacted</th>
+                                        <th style="padding: 1rem; text-align: center; border-bottom: 1px solid #e2e8f0;">Title I</th>
+                                        <th style="padding: 1rem; text-align: center; border-bottom: 1px solid #e2e8f0;">Avg Utilization</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${Object.entries(areaBreakdown).map(([area, data]) => `
+                                        <tr style="border-bottom: 1px solid #f1f5f9;">
+                                            <td style="padding: 1rem; font-weight: 500;">${area}</td>
+                                            <td style="padding: 1rem; text-align: center;">${data.count}</td>
+                                            <td style="padding: 1rem; text-align: center;">${data.eoel}</td>
+                                            <td style="padding: 1rem; text-align: center;">${data.military}</td>
+                                            <td style="padding: 1rem; text-align: center;">${data.titleI}</td>
+                                            <td style="padding: 1rem; text-align: center;">${(data.totalUtilization / data.count).toFixed(1)}%</td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <div style="margin-bottom: 2rem;">
+                        <h2 style="color: #2d3748; margin-bottom: 1rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.5rem;">Key Insights</h2>
+                        <div style="background: #f7fafc; padding: 1.5rem; border-radius: 8px; border-left: 4px solid #667eea;">
+                            <ul style="margin: 0; padding-left: 1.5rem; line-height: 1.6;">
+                                <li style="margin-bottom: 0.5rem;"><strong>${((eoelCount/totalSchools)*100).toFixed(1)}%</strong> of schools have EOEL programs</li>
+                                <li style="margin-bottom: 0.5rem;"><strong>${((titleICount/totalSchools)*100).toFixed(1)}%</strong> are Title I schools</li>
+                                <li style="margin-bottom: 0.5rem;"><strong>${((militaryCount/totalSchools)*100).toFixed(1)}%</strong> are military-impacted</li>
+                                <li style="margin-bottom: 0.5rem;">Average site utilization: <strong>${avgUtilization.toFixed(1)}%</strong></li>
+                                <li><strong>${Object.keys(areaBreakdown).length}</strong> complex areas represented</li>
+                            </ul>
+                        </div>
+                    </div>
+                    
+                    <div style="text-align: center; margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #e2e8f0; color: #4a5568; font-size: 0.9rem;">
+                        <p>Generated by EOEL Dashboard • Hawaii Early Childhood Education Analysis</p>
+                        <p>For questions contact: EOEL Data Team</p>
+                    </div>
+                </div>
+            `;
+            
+            modal.style.display = 'block';
+        }
+
+        // Show custom data builder
+        function showCustomDataBuilder() {
+            const modal = document.getElementById('customDataModal');
+            const fieldSelector = document.getElementById('fieldSelector');
+            
+            // Define all available fields with user-friendly names
+            const fieldMappings = {
+                'nameofschool': 'School Name',
+                'complexarea': 'Complex Area',
+                'zipcode': 'ZIP Code',
+                'prekstatusofnoneoelschools': 'Pre-K Status',
+                'militaryimpacted': 'Military Impacted',
+                'titlei2425': 'Title I Status',
+                'siteutilization': 'Site Utilization',
+                'currentenrollmentsy2324': 'Current Enrollment',
+                'sitecapacity': 'Site Capacity',
+                'eoelfundedfciloncampus': 'EOEL Program On Campus',
+                'eoelcapacity': 'EOEL Capacity',
+                'principalemail': 'Principal Email',
+                'grades': 'Grade Levels'
+            };
+            
+            fieldSelector.innerHTML = '';
+            Object.entries(fieldMappings).forEach(([field, label]) => {
+                const div = document.createElement('div');
+                div.style.marginBottom = '0.5rem';
+                div.innerHTML = `
+                    <label style="display: flex; align-items: center; cursor: pointer; padding: 0.5rem; border-radius: 4px; transition: background 0.2s;"
+                           onmouseover="this.style.background='#f7fafc'" onmouseout="this.style.background='transparent'">
+                        <input type="checkbox" value="${field}" style="margin-right: 0.5rem;">
+                        <span>${label}</span>
+                    </label>
+                `;
+                fieldSelector.appendChild(div);
+            });
+            
+            modal.style.display = 'block';
+        }
+
+        // Share current view
+        function shareCurrentView() {
+            const modal = document.getElementById('shareModal');
+            const shareURL = document.getElementById('shareURL');
+            const emailTemplate = document.getElementById('emailTemplate');
+            
+            // Create URL with current filter parameters
+            const params = new URLSearchParams();
+            const complexArea = document.getElementById('complexArea').value;
+            const prekStatus = document.getElementById('prekStatus').value;
+            const militaryImpacted = document.getElementById('militaryImpacted').value;
+            const titleI = document.getElementById('titleI').value;
+            const utilizationFilter = document.getElementById('utilizationFilter').value;
+            
+            if (complexArea) params.append('complexArea', complexArea);
+            if (prekStatus) params.append('prekStatus', prekStatus);
+            if (militaryImpacted) params.append('militaryImpacted', militaryImpacted);
+            if (titleI) params.append('titleI', titleI);
+            if (utilizationFilter) params.append('utilizationFilter', utilizationFilter);
+            
+            const baseURL = window.location.origin + window.location.pathname;
+            const fullURL = params.toString() ? `${baseURL}?${params.toString()}` : baseURL;
+            shareURL.value = fullURL;
+            
+            // Create email template
+            const filterSummary = [];
+            if (complexArea) filterSummary.push(`Complex Area: ${complexArea}`);
+            if (prekStatus) filterSummary.push(`Pre-K Status: ${prekStatus}`);
+            if (militaryImpacted) filterSummary.push(`Military Impacted: ${militaryImpacted}`);
+            if (titleI) filterSummary.push(`Title I: ${titleI}`);
+            if (utilizationFilter) filterSummary.push(`Utilization: ${utilizationFilter}`);
+            
+            const totalSchools = filteredData.length;
+            const eoelCount = filteredData.filter(school => school.eoelfundedfciloncampus === 'Yes').length;
+            
+            emailTemplate.value = `Subject: Hawaii Early Childhood Education Data - Dashboard View
+
+Hi [Stakeholder Name],
+
+I've prepared a customized view of our Hawaii early childhood education data for your review:
+
+${filterSummary.length > 0 ? `Applied Filters: ${filterSummary.join(', ')}` : 'Showing all schools in dataset'}
+
+Key Summary:
+• Total Schools: ${totalSchools}
+• EOEL Programs: ${eoelCount}
+• Military Impacted: ${filteredData.filter(school => school.militaryimpacted === 'Yes').length}
+
+View the interactive dashboard here: ${fullURL}
+
+The dashboard allows you to:
+- View all schools on an interactive Hawaii map
+- Filter by various criteria
+- Export data for further analysis
+- Generate presentation-ready summaries
+
+Please let me know if you need any additional analysis or have questions about the data.
+
+Best regards,
+EOEL Team`;
+            
+            modal.style.display = 'block';
+        }
+
+        // Generate custom dataset
+        function generateCustomDataset() {
+            const checkboxes = document.querySelectorAll('#fieldSelector input[type="checkbox"]:checked');
+            const selectedFields = Array.from(checkboxes).map(cb => cb.value);
+            const datasetName = document.getElementById('datasetName').value || 'Custom_Dataset';
+            const datasetNotes = document.getElementById('datasetNotes').value;
+            
+            if (selectedFields.length === 0) {
+                alert('Please select at least one field to include in your dataset.');
+                return;
+            }
+            
+            // Create CSV content with selected fields
+            const headers = selectedFields;
+            const csvContent = [
+                `# ${datasetName}`,
+                `# Generated: ${new Date().toLocaleString()}`,
+                `# Records: ${filteredData.length}`,
+                datasetNotes ? `# Notes: ${datasetNotes}` : '',
+                '', // Empty line
+                headers.join(','),
+                ...filteredData.map(row => headers.map(header => `"${row[header] || ''}"`).join(','))
+            ].filter(line => line !== '').join('\n');
+            
+            // Download the file
+            const blob = new Blob([csvContent], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${datasetName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+            
+            closeCustomDataBuilder();
+        }
+
+        // Helper functions for modals
+        function selectAllFields() {
+            const checkboxes = document.querySelectorAll('#fieldSelector input[type="checkbox"]');
+            checkboxes.forEach(cb => cb.checked = true);
+            updateSelectionSummary();
+        }
+
+        function clearAllFields() {
+            const checkboxes = document.querySelectorAll('#fieldSelector input[type="checkbox"]');
+            checkboxes.forEach(cb => cb.checked = false);
+            updateSelectionSummary();
+        }
+
+        function updateSelectionSummary() {
+            const checkboxes = document.querySelectorAll('#fieldSelector input[type="checkbox"]:checked');
+            const summary = document.getElementById('selectionSummary');
+            summary.textContent = checkboxes.length > 0 ? 
+                `${checkboxes.length} fields selected (${filteredData.length} records)` : 
+                'No fields selected';
+        }
+
+        function copyShareURL() {
+            const shareURL = document.getElementById('shareURL');
+            shareURL.select();
+            document.execCommand('copy');
+            alert('URL copied to clipboard!');
+        }
+
+        function copyEmailTemplate() {
+            const emailTemplate = document.getElementById('emailTemplate');
+            emailTemplate.select();
+            document.execCommand('copy');
+            alert('Email template copied to clipboard!');
+        }
+
+        function printPresentation() {
+            window.print();
+        }
+
+        function closeCustomDataBuilder() {
+            document.getElementById('customDataModal').style.display = 'none';
+        }
+
+        function closePresentationMode() {
+            document.getElementById('presentationModal').style.display = 'none';
+        }
+
+        function closeShareModal() {
+            document.getElementById('shareModal').style.display = 'none';
+        }
+
+        // Load URL parameters on page load
+        function loadURLParameters() {
+            const params = new URLSearchParams(window.location.search);
+            
+            if (params.get('complexArea')) document.getElementById('complexArea').value = params.get('complexArea');
+            if (params.get('prekStatus')) document.getElementById('prekStatus').value = params.get('prekStatus');
+            if (params.get('militaryImpacted')) document.getElementById('militaryImpacted').value = params.get('militaryImpacted');
+            if (params.get('titleI')) document.getElementById('titleI').value = params.get('titleI');
+            if (params.get('utilizationFilter')) document.getElementById('utilizationFilter').value = params.get('utilizationFilter');
+            
+            // Apply filters if any were loaded from URL
+            if (params.toString()) {
+                applyFilters();
+            }
         }
 
         // Close modal when clicking outside
@@ -685,7 +1084,10 @@
         }
 
         // Initialize dashboard when page loads
-        document.addEventListener('DOMContentLoaded', initDashboard);
+        document.addEventListener('DOMContentLoaded', function() {
+            initDashboard();
+            loadURLParameters(); // Load any shared view parameters
+        });
     </script>
 </body>
 </html>
