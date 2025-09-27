@@ -711,7 +711,7 @@ Paste CSV data here:`);
             }
         }
 
-        // Simple CSV parser - Updated for EOEL sheet structure (headers on row 2)
+        // Simple CSV parser - Updated with better filtering
         function parseCSV(csvText) {
             const lines = csvText.split('\n').filter(line => line.trim());
             
@@ -728,8 +728,7 @@ Paste CSV data here:`);
             
             // Start from row 3 (index 2) since row 1 is metadata, row 2 is headers
             for (let i = 2; i < lines.length; i++) {
-                if (lines[i].trim()) {
-                    // Handle CSV parsing with proper quote handling
+                if (lines[i].trim() && !lines[i].startsWith(',,,')) { // Skip empty rows
                     const values = parseCSVLine(lines[i]);
                     const row = {};
                     
@@ -737,64 +736,124 @@ Paste CSV data here:`);
                         row[header] = values[index] || '';
                     });
                     
-                    // Only include rows that have a school name
-                    if (row['Name of School'] && row['Name of School'].trim()) {
+                    // Better filtering: must have school name AND school code
+                    const schoolName = row['Name of School'] || '';
+                    const schoolCode = row['School Code'] || '';
+                    
+                    if (schoolName.trim() && 
+                        schoolCode.trim() && 
+                        schoolName !== 'Name of School' && // Skip header repeats
+                        !schoolName.toLowerCase().includes('total') && // Skip summary rows
+                        schoolCode.match(/^\d+$/)) { // School code should be numeric
                         data.push(row);
                     }
                 }
             }
             
-            console.log('Parsed schools:', data.length);
+            console.log('Parsed schools after filtering:', data.length);
             console.log('Sample school:', data[0]); // Show first school for debugging
             
             return data;
         }
-        
-        // Proper CSV line parser that handles quotes and commas
-        function parseCSVLine(line) {
-            const values = [];
-            let current = '';
-            let inQuotes = false;
-            
-            for (let i = 0; i < line.length; i++) {
-                const char = line[i];
-                
-                if (char === '"') {
-                    inQuotes = !inQuotes;
-                } else if (char === ',' && !inQuotes) {
-                    values.push(current.trim());
-                    current = '';
-                } else {
-                    current += char;
-                }
-            }
-            
-            // Add the last value
-            values.push(current.trim());
-            
-            return values.map(v => v.replace(/^"|"$/g, '')); // Remove surrounding quotes
-        }
 
-        // Geocode schools (simplified - you'll need to add lat/lng to your data or use geocoding API)
+        // Real Hawaii coordinates by ZIP code for proper mapping
+        const hawaiiZipCoords = {
+            // Oahu
+            '96701': { lat: 21.3845, lng: -157.9284 }, // Aiea
+            '96706': { lat: 21.3407, lng: -158.0515 }, // Ewa Beach
+            '96707': { lat: 21.3363, lng: -158.0711 }, // Kapolei
+            '96712': { lat: 21.6389, lng: -158.0572 }, // Haleiwa
+            '96717': { lat: 21.6877, lng: -157.9652 }, // Hauula
+            '96730': { lat: 21.5647, lng: -157.8378 }, // Kaaawa
+            '96731': { lat: 21.6772, lng: -158.1058 }, // Kahuku
+            '96734': { lat: 21.4022, lng: -157.7394 }, // Kailua
+            '96744': { lat: 21.4389, lng: -157.8583 }, // Kaneohe
+            '96762': { lat: 21.6447, lng: -158.0422 }, // Laie
+            '96789': { lat: 21.4511, lng: -158.0156 }, // Mililani
+            '96792': { lat: 21.4389, lng: -158.1867 }, // Waianae
+            '96815': { lat: 21.2777, lng: -157.8262 }, // Honolulu (Diamond Head)
+            '96816': { lat: 21.2777, lng: -157.7408 }, // Honolulu (Kahala)
+            '96817': { lat: 21.3319, lng: -157.8583 }, // Honolulu (Kalihi)
+            '96819': { lat: 21.3319, lng: -157.8583 }, // Honolulu (Kalihi)
+            '96821': { lat: 21.2777, lng: -157.7408 }, // Honolulu (Hawaii Kai)
+            '96825': { lat: 21.2777, lng: -157.7408 }, // Honolulu (Hawaii Kai)
+            
+            // Kauai
+            '96703': { lat: 21.9311, lng: -159.3617 }, // Anahola
+            '96705': { lat: 22.0964, lng: -159.3286 }, // Hanalei
+            '96714': { lat: 22.0858, lng: -159.5019 }, // Haena
+            '96715': { lat: 22.2011, lng: -159.4958 }, // Princeville
+            '96716': { lat: 21.9311, lng: -159.3617 }, // Kapaa
+            '96741': { lat: 21.8847, lng: -159.3717 }, // Kapaa
+            '96746': { lat: 21.9722, lng: -159.6506 }, // Kekaha
+            '96751': { lat: 21.9311, lng: -159.3617 }, // Kapaa
+            '96754': { lat: 21.9408, lng: -159.4075 }, // Kilauea
+            '96756': { lat: 21.8847, lng: -159.6700 }, // Lihue
+            '96765': { lat: 21.8847, lng: -159.6700 }, // Lihue
+            '96766': { lat: 21.8847, lng: -159.6700 }, // Lihue
+            '96769': { lat: 21.9197, lng: -159.5036 }, // Waimea
+            '96796': { lat: 21.9197, lng: -159.5036 }, // Waimea
+            
+            // Big Island
+            '96720': { lat: 19.7297, lng: -155.0890 }, // Hilo
+            '96713': { lat: 20.7886, lng: -156.0512 }, // Hana
+            '96743': { lat: 19.6405, lng: -155.9969 }, // Holualoa
+            '96750': { lat: 19.7297, lng: -155.0890 }, // Kailua-Kona
+            '96740': { lat: 19.7297, lng: -155.0890 }, // Kailua-Kona
+            '96749': { lat: 19.5429, lng: -155.6659 }, // Kealakekua
+            '96755': { lat: 19.5429, lng: -155.6659 }, // Captain Cook
+            '96760': { lat: 19.8968, lng: -155.5828 }, // Kurtistown
+            '96771': { lat: 19.8968, lng: -155.5828 }, // Mountain View
+            '96772': { lat: 19.4925, lng: -155.8347 }, // Naalehu
+            '96773': { lat: 19.4925, lng: -155.8347 }, // Ocean View
+            '96774': { lat: 19.5429, lng: -155.6659 }, // Pahala
+            '96777': { lat: 19.4342, lng: -155.2711 }, // Pahoa
+            '96778': { lat: 19.5429, lng: -155.6659 }, // Papaikou
+            '96780': { lat: 19.5429, lng: -155.6659 }, // Pepeekeo
+            '96781': { lat: 19.5429, lng: -155.6659 }, // Volcano
+            '96783': { lat: 20.0208, lng: -155.6686 }, // Waimea
+            '96785': { lat: 19.7297, lng: -155.0890 }, // Waikoloa
+            
+            // Maui
+            '96732': { lat: 20.8893, lng: -156.4729 }, // Kahului
+            '96753': { lat: 20.7539, lng: -156.4522 }, // Kihei
+            '96761': { lat: 20.8783, lng: -156.6825 }, // Lahaina
+            '96768': { lat: 20.8483, lng: -156.3256 }, // Makawao
+            '96779': { lat: 20.9025, lng: -156.3647 }, // Paia
+            '96790': { lat: 20.7539, lng: -156.3256 }, // Kula
+            '96793': { lat: 20.8893, lng: -156.5047 }, // Wailuku
+            '96708': { lat: 20.9222, lng: -156.3033 }, // Haiku
+            '96784': { lat: 20.7539, lng: -156.4522 }, // Wailea
+            '96786': { lat: 20.7539, lng: -156.4522 }, // Wailea
+            '96787': { lat: 20.9025, lng: -156.3647 }, // Paia
+            '96788': { lat: 20.9025, lng: -156.3647 }, // Puunene
+            
+            // Molokai & Lanai
+            '96748': { lat: 21.0985, lng: -157.0594 }, // Kaunakakai
+            '96729': { lat: 21.1444, lng: -157.0269 }, // Hoolehua
+            '96763': { lat: 20.8283, lng: -156.9197 }, // Lanai City
+            '96770': { lat: 21.1053, lng: -157.2051 }  // Maunaloa
+        };
+
+        // Geocode schools using real Hawaii ZIP codes
         async function geocodeSchools() {
-            // For demo purposes, using approximate coordinates for Hawaii islands
-            const hawaiiRegions = {
-                'Farrington-Kaiser-Kalani': { lat: 21.3099, lng: -157.8581 },
-                'Campbell-Kapolei': { lat: 21.3407, lng: -158.0515 },
-                'Castle-Kahuku': { lat: 21.6574, lng: -157.9362 },
-                'Baldwin-Kekaulike-Kūlanihākoʻi-Maui': { lat: 20.7984, lng: -156.3319 },
-                'Hilo-Waiākea': { lat: 19.7297, lng: -155.0890 },
-                'Hāna-Lahainaluna-Lānaʻi-Molokai': { lat: 20.8740, lng: -156.6850 }
-            };
-
             schoolsData.forEach((school, index) => {
-                const complexArea = school['Complex Area'] || '';
-                const baseCoords = hawaiiRegions[complexArea] || { lat: 21.3099, lng: -157.8581 };
+                const zipCode = school['Zip Code'] || school['ZIP Code'] || '';
+                const coords = hawaiiZipCoords[zipCode];
                 
-                // Add slight random offset for visual clarity
-                school.lat = baseCoords.lat + (Math.random() - 0.5) * 0.1;
-                school.lng = baseCoords.lng + (Math.random() - 0.5) * 0.1;
+                if (coords) {
+                    // Use actual coordinates with slight random offset for visual clarity
+                    school.lat = coords.lat + (Math.random() - 0.5) * 0.01;
+                    school.lng = coords.lng + (Math.random() - 0.5) * 0.01;
+                } else {
+                    // Default to central Hawaii if ZIP not found
+                    console.log('ZIP code not found for school:', school['Name of School'], 'ZIP:', zipCode);
+                    school.lat = 20.7967 + (Math.random() - 0.5) * 0.1;
+                    school.lng = -156.3319 + (Math.random() - 0.5) * 0.1;
+                }
             });
+            
+            console.log('Geocoded', schoolsData.length, 'schools');
         }
 
         // Initialize Leaflet map centered on Hawaii
