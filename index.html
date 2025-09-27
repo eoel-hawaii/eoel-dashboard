@@ -627,11 +627,15 @@
                 const proxyUrl = 'https://cors-anywhere.herokuapp.com/';
                 const targetUrl = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=0`;
                 
+                console.log('🔄 Attempting to load Google Sheets data...');
+                
                 let response;
                 try {
                     // First try direct connection
+                    console.log('📡 Trying direct connection...');
                     response = await fetch(targetUrl);
                 } catch (error) {
+                    console.log('❌ Direct connection failed, trying CORS proxy...');
                     // If direct fails, try with CORS proxy
                     response = await fetch(proxyUrl + targetUrl);
                 }
@@ -640,9 +644,19 @@
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
                 
+                console.log('✅ Successfully fetched CSV data');
                 const csvText = await response.text();
+                console.log('📄 CSV text length:', csvText.length);
+                console.log('📄 First 500 characters:', csvText.substring(0, 500));
+                
                 schoolsData = parseCSV(csvText);
                 filteredData = [...schoolsData];
+                
+                console.log('🏫 Final school count:', schoolsData.length);
+                if (schoolsData.length > 0) {
+                    console.log('🔍 Sample school data:', schoolsData[0]);
+                    console.log('📋 Available fields:', Object.keys(schoolsData[0]));
+                }
                 
                 // Update the interface
                 populateFilters();
@@ -659,10 +673,10 @@
                     <small>Last updated: ${new Date().toLocaleString()}</small>
                 `;
                 
-                console.log('Successfully loaded Google Sheets data:', schoolsData.length, 'schools');
+                console.log('✅ Dashboard updated with live data');
                 
             } catch (error) {
-                console.error('Error loading live data:', error);
+                console.error('❌ Error loading live data:', error);
                 
                 // Reset button and show error
                 loadBtn.textContent = '❌ Load Failed - Try Again';
