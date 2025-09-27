@@ -348,11 +348,19 @@
 
             <div class="export-section">
                 <h3>🎯 Executive Tools</h3>
+                <button class="btn" onclick="loadLiveData()" id="loadDataBtn">🔄 Load Live EOEL Data</button>
                 <button class="btn" onclick="showDataTable()">View Data Table</button>
                 <button class="btn" onclick="generateExecutiveSummary()">📊 Executive Summary</button>
                 <button class="btn btn-secondary" onclick="showCustomReportBuilder()">🔧 Build Custom Report</button>
                 <button class="btn btn-secondary" onclick="shareCurrentView()">📤 Share This View</button>
                 <button class="btn" onclick="exportToCSV()">📁 Export to CSV</button>
+            </div>
+
+            <div class="stats-panel" style="margin-top: 1rem;">
+                <h3>📍 Data Source</h3>
+                <div id="dataSourceInfo" style="font-size: 0.9rem; color: #4a5568; line-height: 1.4;">
+                    Using sample data (6 schools). Click "Load Live EOEL Data" above to connect to your Google Sheet.
+                </div>
             </div>
         </div>
 
@@ -605,13 +613,28 @@
             filteredData = [...schoolsData];
         }
 
-        // Load data from Google Sheets (will implement this step by step)
-        async function loadDataFromGoogleSheets() {
+        // Load live data from Google Sheets
+        async function loadLiveData() {
+            const loadBtn = document.getElementById('loadDataBtn');
+            const dataSourceInfo = document.getElementById('dataSourceInfo');
+            
+            loadBtn.textContent = '⏳ Loading...';
+            loadBtn.disabled = true;
+            dataSourceInfo.textContent = 'Connecting to Google Sheets...';
+            
             try {
-                // First, let's try the export URL approach
-                const response = await fetch(SHEET_URL, {
-                    mode: 'cors'
-                });
+                // Try to load from Google Sheets using CORS proxy
+                const proxyUrl = 'https://cors-anywhere.herokuapp.com/';
+                const targetUrl = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=0`;
+                
+                let response;
+                try {
+                    // First try direct connection
+                    response = await fetch(targetUrl);
+                } catch (error) {
+                    // If direct fails, try with CORS proxy
+                    response = await fetch(proxyUrl + targetUrl);
+                }
                 
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
@@ -620,12 +643,71 @@
                 const csvText = await response.text();
                 schoolsData = parseCSV(csvText);
                 filteredData = [...schoolsData];
+                
+                // Update the interface
+                populateFilters();
+                geocodeSchools();
+                displayMarkers();
+                updateStats();
+                
+                // Update button and status
+                loadBtn.textContent = '✅ Live Data Loaded';
+                loadBtn.style.background = 'linear-gradient(135deg, #48bb78 0%, #38a169 100%)';
+                dataSourceInfo.innerHTML = `
+                    <strong>✅ Live Google Sheets Data</strong><br>
+                    Loaded ${schoolsData.length} schools from your EOEL database<br>
+                    <small>Last updated: ${new Date().toLocaleString()}</small>
+                `;
+                
                 console.log('Successfully loaded Google Sheets data:', schoolsData.length, 'schools');
+                
             } catch (error) {
-                console.error('Error loading Google Sheets:', error);
-                // Fallback to sample data
-                loadSampleData();
-                throw error;
+                console.error('Error loading live data:', error);
+                
+                // Reset button and show error
+                loadBtn.textContent = '❌ Load Failed - Try Again';
+                loadBtn.disabled = false;
+                dataSourceInfo.innerHTML = `
+                    <strong>❌ Google Sheets Connection Failed</strong><br>
+                    Using sample data. You can:<br>
+                    • Try clicking "Load Live EOEL Data" again<br>
+                    • Or export CSV from Google Sheets and email it<br>
+                    <small>Error: ${error.message}</small>
+                `;
+            }
+        }
+
+        // Alternative: Load data from pasted CSV
+        function showPasteDataOption() {
+            const csvInput = prompt(`Google Sheets direct connection failed. 
+            
+As an alternative, you can:
+1. Go to your Google Sheet
+2. Select all data (Ctrl+A)
+3. Copy it (Ctrl+C)  
+4. Paste it in the box below:
+
+Paste CSV data here:`);
+            
+            if (csvInput && csvInput.trim()) {
+                try {
+                    schoolsData = parseCSV(csvInput);
+                    filteredData = [...schoolsData];
+                    
+                    populateFilters();
+                    geocodeSchools();
+                    displayMarkers();
+                    updateStats();
+                    
+                    document.getElementById('loadDataBtn').textContent = '✅ Data Pasted';
+                    document.getElementById('dataSourceInfo').innerHTML = `
+                        <strong>✅ Manual Data Import</strong><br>
+                        Loaded ${schoolsData.length} schools from pasted CSV<br>
+                        <small>Imported: ${new Date().toLocaleString()}</small>
+                    `;
+                } catch (error) {
+                    alert('Error parsing CSV data. Please check the format and try again.');
+                }
             }
         }
 
