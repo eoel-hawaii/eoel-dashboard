@@ -755,6 +755,31 @@ Paste CSV data here:`);
             
             return data;
         }
+        
+        // Proper CSV line parser that handles quotes and commas
+        function parseCSVLine(line) {
+            const values = [];
+            let current = '';
+            let inQuotes = false;
+            
+            for (let i = 0; i < line.length; i++) {
+                const char = line[i];
+                
+                if (char === '"') {
+                    inQuotes = !inQuotes;
+                } else if (char === ',' && !inQuotes) {
+                    values.push(current.trim());
+                    current = '';
+                } else {
+                    current += char;
+                }
+            }
+            
+            // Add the last value
+            values.push(current.trim());
+            
+            return values.map(v => v.replace(/^"|"$/g, '')); // Remove surrounding quotes
+        }
 
         // Real Hawaii coordinates by ZIP code for proper mapping
         const hawaiiZipCoords = {
