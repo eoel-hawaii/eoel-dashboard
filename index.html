@@ -711,27 +711,68 @@ Paste CSV data here:`);
             }
         }
 
-        // Simple CSV parser
+        // Simple CSV parser - Updated for EOEL sheet structure (headers on row 2)
         function parseCSV(csvText) {
-            const lines = csvText.split('\n');
-            const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
+            const lines = csvText.split('\n').filter(line => line.trim());
+            
+            if (lines.length < 3) {
+                console.error('CSV has insufficient data rows');
+                return [];
+            }
+            
+            // For EOEL sheet: Row 1 is metadata, Row 2 has headers, Row 3+ has data
+            const headers = lines[1].split(',').map(h => h.replace(/"/g, '').trim());
             const data = [];
-
-            for (let i = 1; i < lines.length; i++) {
+            
+            console.log('Found headers:', headers.slice(0, 10)); // Show first 10 headers for debugging
+            
+            // Start from row 3 (index 2) since row 1 is metadata, row 2 is headers
+            for (let i = 2; i < lines.length; i++) {
                 if (lines[i].trim()) {
-                    const values = lines[i].split(',').map(v => v.replace(/"/g, '').trim());
+                    // Handle CSV parsing with proper quote handling
+                    const values = parseCSVLine(lines[i]);
                     const row = {};
+                    
                     headers.forEach((header, index) => {
                         row[header] = values[index] || '';
                     });
                     
-                    // Only include rows with school names
-                    if (row['Name of School']) {
+                    // Only include rows that have a school name
+                    if (row['Name of School'] && row['Name of School'].trim()) {
                         data.push(row);
                     }
                 }
             }
+            
+            console.log('Parsed schools:', data.length);
+            console.log('Sample school:', data[0]); // Show first school for debugging
+            
             return data;
+        }
+        
+        // Proper CSV line parser that handles quotes and commas
+        function parseCSVLine(line) {
+            const values = [];
+            let current = '';
+            let inQuotes = false;
+            
+            for (let i = 0; i < line.length; i++) {
+                const char = line[i];
+                
+                if (char === '"') {
+                    inQuotes = !inQuotes;
+                } else if (char === ',' && !inQuotes) {
+                    values.push(current.trim());
+                    current = '';
+                } else {
+                    current += char;
+                }
+            }
+            
+            // Add the last value
+            values.push(current.trim());
+            
+            return values.map(v => v.replace(/^"|"$/g, '')); // Remove surrounding quotes
         }
 
         // Geocode schools (simplified - you'll need to add lat/lng to your data or use geocoding API)
