@@ -725,7 +725,7 @@ Paste CSV data here:`);
             }
         }
 
-        // Robust CSV parser that handles complex data properly
+        // Simple but reliable CSV parser - back to basics
         function parseCSV(csvText) {
             const lines = csvText.split('\n').filter(line => line.trim());
             
@@ -734,117 +734,64 @@ Paste CSV data here:`);
                 return [];
             }
             
-            // For EOEL sheet: Row 1 is metadata, Row 2 has headers, Row 3+ has data
-            console.log('📋 Parsing headers from row 2...');
-            const headers = parseCSVLine(lines[1]); // Use robust parser for headers too
+            console.log('📋 Total lines in CSV:', lines.length);
+            console.log('📋 Line 1 (metadata):', lines[0].substring(0, 100));
+            console.log('📋 Line 2 (headers):', lines[1].substring(0, 100));
+            console.log('📋 Line 3 (first data):', lines[2].substring(0, 100));
+            
+            // For EOEL sheet: Row 2 has headers (index 1)
+            const headerLine = lines[1];
+            const headers = headerLine.split(',').map(h => h.replace(/^"|"$/g, '').trim());
+            
             console.log('📋 Found headers:', headers.length, 'columns');
-            console.log('📋 Header names:', headers.slice(0, 10), '... (showing first 10)');
+            console.log('📋 First 10 headers:', headers.slice(0, 10));
+            console.log('📋 Last 10 headers:', headers.slice(-10));
             
             const data = [];
             
             // Start from row 3 (index 2) since row 1 is metadata, row 2 is headers
             for (let i = 2; i < lines.length; i++) {
-                if (lines[i].trim() && !lines[i].startsWith(',,,')) { // Skip empty rows
-                    const values = parseCSVLine(lines[i]);
+                const line = lines[i].trim();
+                if (!line || line.startsWith(',,,')) continue; // Skip empty rows
+                
+                // Simple split - we'll handle quotes later if needed
+                const values = line.split(',').map(v => v.replace(/^"|"$/g, '').trim());
+                
+                // Only process if we have a reasonable number of columns
+                if (values.length < 10) {
+                    console.log('⚠️ Skipping row', i, '- too few columns:', values.length);
+                    continue;
+                }
+                
+                const row = {};
+                headers.forEach((header, index) => {
+                    row[header] = values[index] || '';
+                });
+                
+                // Basic filtering: must have school name
+                const schoolName = row['Name of School'] || '';
+                if (schoolName && schoolName.trim() && schoolName !== 'Name of School') {
+                    data.push(row);
                     
-                    // Only process if we have enough values
-                    if (values.length >= headers.length * 0.8) { // Allow some missing trailing fields
-                        const row = {};
-                        
-                        headers.forEach((header, index) => {
-                            row[header] = values[index] || '';
-                        });
-                        
-                        // Better filtering: must have school name AND school code
-                        const schoolName = row['Name of School'] || '';
-                        const schoolCode = row['School Code'] || '';
-                        
-                        if (schoolName.trim() && 
-                            schoolCode.trim() && 
-                            schoolName !== 'Name of School' && // Skip header repeats
-                            !schoolName.toLowerCase().includes('total') && // Skip summary rows
-                            schoolCode.match(/^\d+$/)) { // School code should be numeric
-                            data.push(row);
-                        }
-                    } else {
-                        console.log('⚠️ Skipping row', i, '- insufficient columns:', values.length, 'vs expected:', headers.length);
+                    // Log first few schools for debugging
+                    if (data.length <= 3) {
+                        console.log(`🏫 School ${data.length}:`, schoolName, '- Fields:', Object.keys(row).length);
                     }
                 }
             }
             
-            console.log('🏫 Parsed schools after filtering:', data.length);
+            console.log('🏫 Total parsed schools:', data.length);
             if (data.length > 0) {
-                console.log('🔍 Sample school:', data[0]);
-                console.log('📊 Fields per school:', Object.keys(data[0]).length);
+                console.log('🔍 Sample school keys:', Object.keys(data[0]).slice(0, 15));
             }
             
             return data;
         }
         
-        // Clean and normalize cell values from Google Sheets
-        function cleanCellValue(value) {
-            if (!value) return '';
-            
-            // Handle hyperlinks - Google Sheets exports them as =HYPERLINK("url","text")
-            if (value.startsWith('=HYPERLINK(')) {
-                const match = value.match(/=HYPERLINK\("([^"]+)","([^"]+)"\)/);
-                if (match) {
-                    return match[2]; // Return the display text, not the URL
-                }
-            }
-            
-            // Handle other formulas - just extract the display value
-            if (value.startsWith('=')) {
-                // For now, just remove the = and return the rest
-                // You might want to handle specific formulas differently
-                return value.substring(1);
-            }
-            
-            // Clean up common Google Sheets artifacts
-            value = value.replace(/^\s+|\s+$/g, ''); // Trim whitespace
-            value = value.replace(/\u00A0/g, ' '); // Replace non-breaking spaces
-            value = value.replace(/\u2019/g, "'"); // Replace smart quotes
-            value = value.replace(/\u201C|\u201D/g, '"'); // Replace smart quotes
-            
-            return value;
-        }
-
-        // Much more robust CSV line parser that properly handles quotes, commas, hyperlinks, and complex data
+        // Simple parser - removed the complex quote handling for now
         function parseCSVLine(line) {
-            const values = [];
-            let current = '';
-            let inQuotes = false;
-            let i = 0;
-            
-            while (i < line.length) {
-                const char = line[i];
-                const nextChar = line[i + 1];
-                
-                if (char === '"') {
-                    if (inQuotes && nextChar === '"') {
-                        // Handle escaped quotes ("")
-                        current += '"';
-                        i += 2; // Skip both quotes
-                        continue;
-                    } else {
-                        // Toggle quote state
-                        inQuotes = !inQuotes;
-                    }
-                } else if (char === ',' && !inQuotes) {
-                    // Found a delimiter outside quotes
-                    values.push(cleanCellValue(current));
-                    current = '';
-                } else {
-                    // Regular character
-                    current += char;
-                }
-                i++;
-            }
-            
-            // Add the last value
-            values.push(cleanCellValue(current));
-            
-            return values;
+            // Just split on commas and clean up
+            return line.split(',').map(v => v.replace(/^"|"$/g, '').trim());
         }
 
         // Real Hawaii coordinates by ZIP code for proper mapping
