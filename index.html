@@ -40,7 +40,7 @@
 
         .dashboard-container {
             display: grid;
-            grid-template-columns: 300px 1fr;
+            grid-template-columns: 320px 1fr;
             height: calc(100vh - 120px);
             gap: 1rem;
             padding: 1rem;
@@ -256,7 +256,7 @@
 <body>
     <div class="header">
         <h1>🌺 EOEL Hawaii Early Childhood Dashboard</h1>
-        <p>Interactive mapping and analysis of Hawaii's early childhood programs</p>
+        <p>Executive analysis of Hawaii's early learning programs and capacity</p>
     </div>
 
     <div class="dashboard-container">
@@ -272,18 +272,30 @@
                 </div>
 
                 <div class="filter-group">
-                    <label for="prekStatus">Pre-K Status:</label>
-                    <select id="prekStatus">
-                        <option value="">All Status</option>
+                    <label for="complex">Complex:</label>
+                    <select id="complex">
+                        <option value="">All Complexes</option>
                     </select>
                 </div>
 
                 <div class="filter-group">
-                    <label for="militaryImpacted">Military Impacted:</label>
-                    <select id="militaryImpacted">
-                        <option value="">All</option>
-                        <option value="Yes">Yes</option>
-                        <option value="No">No</option>
+                    <label for="gradeLevel">Grade Level:</label>
+                    <select id="gradeLevel">
+                        <option value="">All Levels</option>
+                        <option value="elementary">Elementary (K-6)</option>
+                        <option value="intermediate">Intermediate (6-8)</option>
+                        <option value="high">High School (9-12)</option>
+                        <option value="combined">Combined (K-12)</option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <label for="eoelStatus">EOEL Program Status:</label>
+                    <select id="eoelStatus">
+                        <option value="">All Schools</option>
+                        <option value="has_eoel">Has EOEL Program</option>
+                        <option value="no_eoel">No EOEL Program</option>
+                        <option value="planned">Planned/Opening</option>
                     </select>
                 </div>
 
@@ -300,9 +312,9 @@
                     <label for="utilizationFilter">Site Utilization:</label>
                     <select id="utilizationFilter">
                         <option value="">All Levels</option>
-                        <option value="low">< 60%</option>
-                        <option value="medium">60% - 85%</option>
-                        <option value="high">> 85%</option>
+                        <option value="under">Under-utilized (< 70%)</option>
+                        <option value="optimal">Optimal (70% - 95%)</option>
+                        <option value="over">Over-capacity (> 95%)</option>
                     </select>
                 </div>
 
@@ -321,20 +333,24 @@
                     <span class="stat-value" id="eoelCount">0</span>
                 </div>
                 <div class="stat-item">
+                    <span class="stat-label">EOEL Capacity:</span>
+                    <span class="stat-value" id="eoelCapacity">0</span>
+                </div>
+                <div class="stat-item">
                     <span class="stat-label">Avg Utilization:</span>
                     <span class="stat-value" id="avgUtilization">0%</span>
                 </div>
                 <div class="stat-item">
-                    <span class="stat-label">Military Impacted:</span>
-                    <span class="stat-value" id="militaryCount">0</span>
+                    <span class="stat-label">Title I Schools:</span>
+                    <span class="stat-value" id="titleICount">0</span>
                 </div>
             </div>
 
             <div class="export-section">
                 <h3>🎯 Executive Tools</h3>
                 <button class="btn" onclick="showDataTable()">View Data Table</button>
-                <button class="btn" onclick="generatePresentationView()">📊 Executive Summary</button>
-                <button class="btn btn-secondary" onclick="showCustomDataBuilder()">🔧 Build Custom Report</button>
+                <button class="btn" onclick="generateExecutiveSummary()">📊 Executive Summary</button>
+                <button class="btn btn-secondary" onclick="showCustomReportBuilder()">🔧 Build Custom Report</button>
                 <button class="btn btn-secondary" onclick="shareCurrentView()">📤 Share This View</button>
                 <button class="btn" onclick="exportToCSV()">📁 Export to CSV</button>
             </div>
@@ -342,7 +358,7 @@
 
         <div class="map-container">
             <div class="loading" id="loading">
-                <div>🗺️ Loading Hawaii schools...</div>
+                <div>🗺️ Loading EOEL schools from Google Sheets...</div>
             </div>
             <div id="map"></div>
         </div>
@@ -352,7 +368,7 @@
     <div id="dataTableModal" class="data-table-modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h2>📊 School Data Table</h2>
+                <h2>📊 EOEL School Data Table</h2>
                 <span class="close" onclick="closeDataTable()">&times;</span>
             </div>
             <div id="tableContainer">
@@ -363,11 +379,27 @@
             </div>
         </div>
     </div>
-    <div id="customDataModal" class="data-table-modal">
+
+    <!-- Executive Summary Modal -->
+    <div id="executiveModal" class="data-table-modal">
+        <div class="modal-content" style="width: 95%; height: 95%;">
+            <div class="modal-header">
+                <h2>📊 EOEL Executive Summary</h2>
+                <div>
+                    <button class="btn" onclick="printExecutiveSummary()" style="margin-right: 1rem;">🖨️ Print</button>
+                    <span class="close" onclick="closeExecutiveSummary()">&times;</span>
+                </div>
+            </div>
+            <div id="executiveContent"></div>
+        </div>
+    </div>
+
+    <!-- Custom Report Builder Modal -->
+    <div id="customReportModal" class="data-table-modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h2>🔧 Build Custom Dataset for Stakeholders</h2>
-                <span class="close" onclick="closeCustomDataBuilder()">&times;</span>
+                <h2>🔧 Build Custom Report for Executive Team</h2>
+                <span class="close" onclick="closeCustomReportBuilder()">&times;</span>
             </div>
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
                 <div>
@@ -383,36 +415,20 @@
                 <div>
                     <h3>Preview & Export:</h3>
                     <div style="margin-bottom: 1rem;">
-                        <label>Dataset Name:</label>
-                        <input type="text" id="datasetName" placeholder="e.g. Title I Schools Analysis" style="width: 100%; padding: 0.5rem; margin-top: 0.5rem;">
+                        <label>Report Name:</label>
+                        <input type="text" id="reportName" placeholder="e.g. Complex Area EOEL Analysis" style="width: 100%; padding: 0.5rem; margin-top: 0.5rem;">
                     </div>
                     <div style="margin-bottom: 1rem;">
                         <label>Add Notes:</label>
-                        <textarea id="datasetNotes" placeholder="Context for stakeholders..." style="width: 100%; padding: 0.5rem; height: 100px; margin-top: 0.5rem;"></textarea>
+                        <textarea id="reportNotes" placeholder="Context for executive team..." style="width: 100%; padding: 0.5rem; height: 100px; margin-top: 0.5rem;"></textarea>
                     </div>
                     <div style="background: #f7fafc; padding: 1rem; border-radius: 6px; margin-bottom: 1rem;">
                         <strong>Current Selection:</strong>
                         <div id="selectionSummary">No fields selected</div>
                     </div>
-                    <button class="btn" onclick="generateCustomDataset()">📊 Generate Dataset</button>
+                    <button class="btn" onclick="generateCustomReport()">📊 Generate Report</button>
                     <button class="btn btn-secondary" onclick="previewCustomData()">👁️ Preview Table</button>
                 </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Presentation Mode Modal -->
-    <div id="presentationModal" class="data-table-modal">
-        <div class="modal-content" style="width: 95%; height: 95%;">
-            <div class="modal-header">
-                <h2>📊 Stakeholder Presentation View</h2>
-                <div>
-                    <button class="btn" onclick="printPresentation()" style="margin-right: 1rem;">🖨️ Print</button>
-                    <span class="close" onclick="closePresentationMode()">&times;</span>
-                </div>
-            </div>
-            <div id="presentationContent">
-                <!-- Presentation content will be generated here -->
             </div>
         </div>
     </div>
@@ -425,7 +441,7 @@
                 <span class="close" onclick="closeShareModal()">&times;</span>
             </div>
             <div>
-                <p style="margin-bottom: 1rem; color: #4a5568;">Share this filtered view with stakeholders:</p>
+                <p style="margin-bottom: 1rem; color: #4a5568;">Share this filtered view with colleagues:</p>
                 <div style="background: #f7fafc; padding: 1rem; border-radius: 6px; margin-bottom: 1rem;">
                     <label style="display: block; margin-bottom: 0.5rem; font-weight: bold;">Shareable URL:</label>
                     <input type="text" id="shareURL" readonly style="width: 100%; padding: 0.5rem; background: white;" onclick="this.select()">
@@ -450,121 +466,235 @@
         let filteredData = [];
         let markers = [];
 
-        // Sample data - replace with your CSV data
-        const sampleSchools = [
-            {
-                nameofschool: "Aiea Elementary School",
-                zipcode: "96701",
-                complexarea: "Pearl City-Aiea",
-                prekstatusofnoneoelschools: "Has Pre-K",
-                militaryimpacted: "Yes",
-                titlei2425: "Yes",
-                siteutilization: "78%",
-                currentenrollmentsy2324: 450,
-                sitecapacity: 575,
-                eoelfundedfciloncampus: "Yes",
-                lat: 21.3845,
-                lng: -157.9284
-            },
-            {
-                nameofschool: "Kailua Elementary School",
-                zipcode: "96734",
-                complexarea: "Kailua-Kalaheo",
-                prekstatusofnoneoelschools: "No Pre-K",
-                militaryimpacted: "No",
-                titlei2425: "No",
-                siteutilization: "92%",
-                currentenrollmentsy2324: 385,
-                sitecapacity: 420,
-                eoelfundedfciloncampus: "No",
-                lat: 21.4022,
-                lng: -157.7394
-            },
-            {
-                nameofschool: "Waianae Elementary School",
-                zipcode: "96792",
-                complexarea: "Waianae",
-                prekstatusofnoneoelschools: "Has Pre-K",
-                militaryimpacted: "No",
-                titlei2425: "Yes",
-                siteutilization: "65%",
-                currentenrollmentsy2324: 520,
-                sitecapacity: 800,
-                eoelfundedfciloncampus: "Yes",
-                lat: 21.4389,
-                lng: -158.1867
-            },
-            {
-                nameofschool: "Mililani Elementary School",
-                zipcode: "96789",
-                complexarea: "Mililani-Waipio-Melemanu",
-                prekstatusofnoneoelschools: "Has Pre-K",
-                militaryimpacted: "Yes",
-                titlei2425: "No",
-                siteutilization: "88%",
-                currentenrollmentsy2324: 642,
-                sitecapacity: 730,
-                eoelfundedfciloncampus: "Yes",
-                lat: 21.4511,
-                lng: -158.0156
-            },
-            {
-                nameofschool: "Hilo Elementary School",
-                zipcode: "96720",
-                complexarea: "Hilo-Waiakea",
-                prekstatusofnoneoelschools: "Has Pre-K",
-                militaryimpacted: "No",
-                titlei2425: "Yes",
-                siteutilization: "71%",
-                currentenrollmentsy2324: 355,
-                sitecapacity: 500,
-                eoelfundedfciloncampus: "No",
-                lat: 19.7297,
-                lng: -155.0890
-            }
-        ];
+        // Google Sheets configuration - Updated for proper access
+        const SHEET_ID = '1l8UAyei-dawrCo0RX6zhyOTm2283R0gB9MVXFjbRy_Y';
+        const SHEET_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=0`;
 
         // Initialize the dashboard
-        function initDashboard() {
-            // Load sample data (replace with CSV loading logic)
-            schoolsData = sampleSchools;
+        async function initDashboard() {
+            try {
+                // For now, use sample data while we fix the Google Sheets connection
+                loadSampleData();
+                initMap();
+                populateFilters();
+                geocodeSchools();
+                displayMarkers();
+                updateStats();
+                document.getElementById('loading').style.display = 'none';
+                
+                // Show message about data source
+                console.log('Dashboard loaded with sample data. Working on Google Sheets integration...');
+            } catch (error) {
+                console.error('Error initializing dashboard:', error);
+                document.getElementById('loading').innerHTML = '<div style="color: red;">Dashboard loaded with sample data. Google Sheets integration in progress.</div>';
+            }
+        }
+
+        // Load sample data based on your actual EOEL structure
+        function loadSampleData() {
+            schoolsData = [
+                {
+                    'Name of School': 'Wailuku Elementary School',
+                    'School Code': '425',
+                    'Complex Area': 'Baldwin-Kekaulike-Kūlanihākoʻi-Maui',
+                    'Complex': 'Baldwin',
+                    'Grades': 'K-5',
+                    'EOEL PreK': '2023 2024',
+                    'EOEL Capacity': '40',
+                    '# EOEL Rooms': '2',
+                    'Title I (24-25)': 'YES',
+                    'Site Capacity': '789',
+                    'Site Utilization': '67.81%',
+                    'Current Enrollment (SY 24-25)': '535',
+                    'English LanguageLearners': '18.00%',
+                    'Zip Code': '96793',
+                    'Principal': 'Dr. Nikan Arapoff',
+                    'Principal Email': 'Nikan.Arapoff@k12.hi.us'
+                },
+                {
+                    'Name of School': 'Kahului Elementary School',
+                    'School Code': '405',
+                    'Complex Area': 'Baldwin-Kekaulike-Kūlanihākoʻi-Maui',
+                    'Complex': 'Maui',
+                    'Grades': 'K-5',
+                    'EOEL PreK': '',
+                    'EOEL Capacity': '',
+                    '# EOEL Rooms': '0',
+                    'Title I (24-25)': 'NO',
+                    'Site Capacity': '825',
+                    'Site Utilization': '94.30%',
+                    'Current Enrollment (SY 24-25)': '778',
+                    'English LanguageLearners': '18.00%',
+                    'Zip Code': '96732',
+                    'Principal': 'Suzanne Forbes',
+                    'Principal Email': 'Suzanne.Forbes@k12.hi.us'
+                },
+                {
+                    'Name of School': 'Barbers Point Elementary School',
+                    'School Code': '251',
+                    'Complex Area': 'Campbell-Kapolei',
+                    'Complex': 'Kapolei',
+                    'Grades': 'K-5',
+                    'EOEL PreK': '2025 (1)',
+                    'EOEL Capacity': '20',
+                    '# EOEL Rooms': '1',
+                    'Title I (24-25)': 'NO',
+                    'Site Capacity': '584',
+                    'Site Utilization': '88.01%',
+                    'Current Enrollment (SY 24-25)': '514',
+                    'English LanguageLearners': '27.00%',
+                    'Zip Code': '96707',
+                    'Principal': 'Aaron Okumura',
+                    'Principal Email': 'aaron.okumura@k12.hi.us'
+                },
+                {
+                    'Name of School': 'Hauʻula Elementary School',
+                    'School Code': '303',
+                    'Complex Area': 'Castle-Kahuku',
+                    'Complex': 'Kahuku',
+                    'Grades': 'K-6',
+                    'EOEL PreK': '2025 (2)',
+                    'EOEL Capacity': '40',
+                    '# EOEL Rooms': '2',
+                    'Title I (24-25)': 'NO',
+                    'Site Capacity': '330',
+                    'Site Utilization': '113.64%',
+                    'Current Enrollment (SY 24-25)': '375',
+                    'English LanguageLearners': '16.00%',
+                    'Zip Code': '96717',
+                    'Principal': 'Uilani Kaitoku',
+                    'Principal Email': 'Uilani.Kaitoku@k12.hi.us'
+                },
+                {
+                    'Name of School': 'Hilo High School',
+                    'School Code': '355',
+                    'Complex Area': 'Hilo-Waiākea',
+                    'Complex': 'Hilo',
+                    'Grades': '9-12',
+                    'EOEL PreK': '',
+                    'EOEL Capacity': '',
+                    '# EOEL Rooms': '0',
+                    'Title I (24-25)': 'NO',
+                    'Site Capacity': '1070',
+                    'Site Utilization': '109.35%',
+                    'Current Enrollment (SY 24-25)': '1170',
+                    'English LanguageLearners': '25.00%',
+                    'Zip Code': '96720',
+                    'Principal': 'Jasmine Urasaki',
+                    'Principal Email': 'Jasmine.Urasaki@k12.hi.us'
+                },
+                {
+                    'Name of School': 'Lāna\'i High & Elementary School',
+                    'School Code': '415',
+                    'Complex Area': 'Hāna-Lahainaluna-Lānaʻi-Molokai',
+                    'Complex': 'Lānaʻi',
+                    'Grades': 'K-12',
+                    'EOEL PreK': '2014 - E 2024 - H',
+                    'EOEL Capacity': '37',
+                    '# EOEL Rooms': '2',
+                    'Title I (24-25)': 'NO',
+                    'Site Capacity': '624',
+                    'Site Utilization': '91.67%',
+                    'Current Enrollment (SY 24-25)': '572',
+                    'English LanguageLearners': '17.00%',
+                    'Zip Code': '96763',
+                    'Principal': 'Douglas Boyer',
+                    'Principal Email': 'Douglas.Boyer@k12.hi.us'
+                }
+            ];
             filteredData = [...schoolsData];
-            
-            // Initialize map
-            initMap();
-            
-            // Populate filter dropdowns
-            populateFilters();
-            
-            // Display initial data
-            displayMarkers();
-            updateStats();
-            
-            // Hide loading
-            document.getElementById('loading').style.display = 'none';
+        }
+
+        // Load data from Google Sheets (will implement this step by step)
+        async function loadDataFromGoogleSheets() {
+            try {
+                // First, let's try the export URL approach
+                const response = await fetch(SHEET_URL, {
+                    mode: 'cors'
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const csvText = await response.text();
+                schoolsData = parseCSV(csvText);
+                filteredData = [...schoolsData];
+                console.log('Successfully loaded Google Sheets data:', schoolsData.length, 'schools');
+            } catch (error) {
+                console.error('Error loading Google Sheets:', error);
+                // Fallback to sample data
+                loadSampleData();
+                throw error;
+            }
+        }
+
+        // Simple CSV parser
+        function parseCSV(csvText) {
+            const lines = csvText.split('\n');
+            const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
+            const data = [];
+
+            for (let i = 1; i < lines.length; i++) {
+                if (lines[i].trim()) {
+                    const values = lines[i].split(',').map(v => v.replace(/"/g, '').trim());
+                    const row = {};
+                    headers.forEach((header, index) => {
+                        row[header] = values[index] || '';
+                    });
+                    
+                    // Only include rows with school names
+                    if (row['Name of School']) {
+                        data.push(row);
+                    }
+                }
+            }
+            return data;
+        }
+
+        // Geocode schools (simplified - you'll need to add lat/lng to your data or use geocoding API)
+        async function geocodeSchools() {
+            // For demo purposes, using approximate coordinates for Hawaii islands
+            const hawaiiRegions = {
+                'Farrington-Kaiser-Kalani': { lat: 21.3099, lng: -157.8581 },
+                'Campbell-Kapolei': { lat: 21.3407, lng: -158.0515 },
+                'Castle-Kahuku': { lat: 21.6574, lng: -157.9362 },
+                'Baldwin-Kekaulike-Kūlanihākoʻi-Maui': { lat: 20.7984, lng: -156.3319 },
+                'Hilo-Waiākea': { lat: 19.7297, lng: -155.0890 },
+                'Hāna-Lahainaluna-Lānaʻi-Molokai': { lat: 20.8740, lng: -156.6850 }
+            };
+
+            schoolsData.forEach((school, index) => {
+                const complexArea = school['Complex Area'] || '';
+                const baseCoords = hawaiiRegions[complexArea] || { lat: 21.3099, lng: -157.8581 };
+                
+                // Add slight random offset for visual clarity
+                school.lat = baseCoords.lat + (Math.random() - 0.5) * 0.1;
+                school.lng = baseCoords.lng + (Math.random() - 0.5) * 0.1;
+            });
         }
 
         // Initialize Leaflet map centered on Hawaii
         function initMap() {
-            map = L.map('map').setView([21.3099, -157.8581], 8);
+            map = L.map('map').setView([20.7967, -156.3319], 7);
             
-            // Add OpenStreetMap tiles
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '© OpenStreetMap contributors'
             }).addTo(map);
         }
 
-        // Populate filter dropdowns with unique values
+        // Populate filter dropdowns with actual data
         function populateFilters() {
-            const complexAreas = [...new Set(schoolsData.map(school => school.complexarea))].sort();
-            const prekStatuses = [...new Set(schoolsData.map(school => school.prekstatusofnoneoelschools))].sort();
+            const complexAreas = [...new Set(schoolsData.map(school => school['Complex Area']).filter(Boolean))].sort();
+            const complexes = [...new Set(schoolsData.map(school => school['Complex']).filter(Boolean))].sort();
             
             populateSelect('complexArea', complexAreas);
-            populateSelect('prekStatus', prekStatuses);
+            populateSelect('complex', complexes);
         }
 
         function populateSelect(selectId, options) {
             const select = document.getElementById(selectId);
+            select.innerHTML = '<option value="">All</option>';
             options.forEach(option => {
                 const optionElement = document.createElement('option');
                 optionElement.value = option;
@@ -575,70 +705,89 @@
 
         // Display school markers on map
         function displayMarkers() {
-            // Clear existing markers
             markers.forEach(marker => map.removeLayer(marker));
             markers = [];
             
-            // Add new markers
             filteredData.forEach(school => {
-                const marker = L.marker([school.lat, school.lng])
-                    .bindPopup(createPopupContent(school))
-                    .addTo(map);
-                
-                markers.push(marker);
+                if (school.lat && school.lng) {
+                    const hasEOEL = school['EOEL PreK'] && school['EOEL PreK'].toLowerCase().includes('202');
+                    const iconColor = hasEOEL ? '#48bb78' : '#e53e3e';
+                    
+                    const marker = L.circleMarker([school.lat, school.lng], {
+                        radius: 6,
+                        fillColor: iconColor,
+                        color: '#fff',
+                        weight: 2,
+                        opacity: 1,
+                        fillOpacity: 0.8
+                    }).bindPopup(createPopupContent(school)).addTo(map);
+                    
+                    markers.push(marker);
+                }
             });
         }
 
         // Create popup content for school markers
         function createPopupContent(school) {
-            const utilization = parseFloat(school.siteutilization) || 0;
-            const utilizationColor = utilization > 85 ? '#48bb78' : utilization > 60 ? '#ed8936' : '#e53e3e';
+            const utilization = parseFloat(school['Site Utilization']) || 0;
+            const utilizationColor = utilization > 90 ? '#e53e3e' : utilization > 70 ? '#ed8936' : '#48bb78';
+            const hasEOEL = school['EOEL PreK'] && school['EOEL PreK'].toLowerCase().includes('202');
             
             return `
-                <div style="min-width: 200px;">
-                    <h4 style="margin-bottom: 0.5rem; color: #2d3748;">${school.nameofschool}</h4>
-                    <div style="margin-bottom: 0.3rem;"><strong>Complex Area:</strong> ${school.complexarea}</div>
-                    <div style="margin-bottom: 0.3rem;"><strong>ZIP Code:</strong> ${school.zipcode}</div>
-                    <div style="margin-bottom: 0.3rem;"><strong>Pre-K Status:</strong> ${school.prekstatusofnoneoelschools}</div>
-                    <div style="margin-bottom: 0.3rem;"><strong>EOEL Program:</strong> ${school.eoelfundedfciloncampus}</div>
-                    <div style="margin-bottom: 0.3rem;"><strong>Military Impacted:</strong> ${school.militaryimpacted}</div>
-                    <div style="margin-bottom: 0.3rem;"><strong>Title I:</strong> ${school.titlei2425}</div>
+                <div style="min-width: 220px;">
+                    <h4 style="margin-bottom: 0.5rem; color: #2d3748;">${school['Name of School'] || 'Unknown School'}</h4>
+                    <div style="margin-bottom: 0.3rem;"><strong>Complex Area:</strong> ${school['Complex Area'] || 'N/A'}</div>
+                    <div style="margin-bottom: 0.3rem;"><strong>Complex:</strong> ${school['Complex'] || 'N/A'}</div>
+                    <div style="margin-bottom: 0.3rem;"><strong>Grade Levels:</strong> ${school['Grades'] || 'N/A'}</div>
+                    <div style="margin-bottom: 0.3rem;"><strong>EOEL Program:</strong> ${hasEOEL ? '✅ Yes' : '❌ No'}</div>
+                    ${school['EOEL Capacity'] ? `<div style="margin-bottom: 0.3rem;"><strong>EOEL Capacity:</strong> ${school['EOEL Capacity']}</div>` : ''}
+                    <div style="margin-bottom: 0.3rem;"><strong>Title I:</strong> ${school['Title I (24-25)'] || 'N/A'}</div>
                     <div style="margin-bottom: 0.3rem;">
-                        <strong>Utilization:</strong> 
-                        <span style="color: ${utilizationColor}; font-weight: bold;">${school.siteutilization}</span>
+                        <strong>Site Utilization:</strong> 
+                        <span style="color: ${utilizationColor}; font-weight: bold;">${school['Site Utilization'] || 'N/A'}</span>
                     </div>
-                    <div><strong>Enrollment:</strong> ${school.currentenrollmentsy2324} / ${school.sitecapacity}</div>
+                    <div><strong>Enrollment:</strong> ${school['Current Enrollment (SY 24-25)'] || 'N/A'} / ${school['Site Capacity'] || 'N/A'}</div>
                 </div>
             `;
         }
 
-        // Apply filters
+        // Apply filters based on actual EOEL data
         function applyFilters() {
             const complexArea = document.getElementById('complexArea').value;
-            const prekStatus = document.getElementById('prekStatus').value;
-            const militaryImpacted = document.getElementById('militaryImpacted').value;
+            const complex = document.getElementById('complex').value;
+            const gradeLevel = document.getElementById('gradeLevel').value;
+            const eoelStatus = document.getElementById('eoelStatus').value;
             const titleI = document.getElementById('titleI').value;
             const utilizationFilter = document.getElementById('utilizationFilter').value;
             
             filteredData = schoolsData.filter(school => {
-                // Complex area filter
-                if (complexArea && school.complexarea !== complexArea) return false;
+                if (complexArea && school['Complex Area'] !== complexArea) return false;
+                if (complex && school['Complex'] !== complex) return false;
+                if (titleI && school['Title I (24-25)'] !== titleI) return false;
                 
-                // Pre-K status filter
-                if (prekStatus && school.prekstatusofnoneoelschools !== prekStatus) return false;
+                // Grade level filter
+                if (gradeLevel) {
+                    const grades = school['Grades'] || '';
+                    if (gradeLevel === 'elementary' && !grades.match(/K|1|2|3|4|5|6/)) return false;
+                    if (gradeLevel === 'intermediate' && !grades.match(/6|7|8/)) return false;
+                    if (gradeLevel === 'high' && !grades.match(/9|10|11|12/)) return false;
+                    if (gradeLevel === 'combined' && !grades.match(/K.*12/)) return false;
+                }
                 
-                // Military impacted filter
-                if (militaryImpacted && school.militaryimpacted !== militaryImpacted) return false;
-                
-                // Title I filter
-                if (titleI && school.titlei2425 !== titleI) return false;
+                // EOEL status filter
+                if (eoelStatus) {
+                    const hasEOEL = school['EOEL PreK'] && school['EOEL PreK'].toLowerCase().includes('202');
+                    if (eoelStatus === 'has_eoel' && !hasEOEL) return false;
+                    if (eoelStatus === 'no_eoel' && hasEOEL) return false;
+                    if (eoelStatus === 'planned' && !school['EOEL PreK']) return false;
+                }
                 
                 // Utilization filter
                 if (utilizationFilter) {
-                    const utilization = parseFloat(school.siteutilization) || 0;
-                    if (utilizationFilter === 'low' && utilization >= 60) return false;
-                    if (utilizationFilter === 'medium' && (utilization < 60 || utilization > 85)) return false;
-                    if (utilizationFilter === 'high' && utilization <= 85) return false;
+                    const utilization = parseFloat(school['Site Utilization']) || 0;
+                    if (utilizationFilter === 'under' && utilization >= 70) return false;
+                    if (utilizationFilter === 'optimal' && (utilization < 70 || utilization > 95)) return false;
+                    if (utilizationFilter === 'over' && utilization <= 95) return false;
                 }
                 
                 return true;
@@ -651,8 +800,9 @@
         // Clear all filters
         function clearFilters() {
             document.getElementById('complexArea').value = '';
-            document.getElementById('prekStatus').value = '';
-            document.getElementById('militaryImpacted').value = '';
+            document.getElementById('complex').value = '';
+            document.getElementById('gradeLevel').value = '';
+            document.getElementById('eoelStatus').value = '';
             document.getElementById('titleI').value = '';
             document.getElementById('utilizationFilter').value = '';
             
@@ -661,80 +811,58 @@
             updateStats();
         }
 
-        // Update statistics panel
+        // Update statistics panel with real EOEL data
         function updateStats() {
             const totalSchools = filteredData.length;
-            const eoelCount = filteredData.filter(school => school.eoelfundedfciloncampus === 'Yes').length;
-            const militaryCount = filteredData.filter(school => school.militaryimpacted === 'Yes').length;
+            const eoelCount = filteredData.filter(school => 
+                school['EOEL PreK'] && school['EOEL PreK'].toLowerCase().includes('202')
+            ).length;
+            const titleICount = filteredData.filter(school => 
+                school['Title I (24-25)'] === 'YES'
+            ).length;
+            
+            const totalEOELCapacity = filteredData.reduce((sum, school) => {
+                const capacity = parseInt(school['EOEL Capacity']) || 0;
+                return sum + capacity;
+            }, 0);
             
             const avgUtilization = filteredData.length > 0 ? 
-                filteredData.reduce((sum, school) => sum + (parseFloat(school.siteutilization) || 0), 0) / filteredData.length : 0;
+                filteredData.reduce((sum, school) => {
+                    const util = parseFloat(school['Site Utilization']) || 0;
+                    return sum + util;
+                }, 0) / filteredData.length : 0;
             
             document.getElementById('totalSchools').textContent = totalSchools;
             document.getElementById('eoelCount').textContent = eoelCount;
+            document.getElementById('eoelCapacity').textContent = totalEOELCapacity;
             document.getElementById('avgUtilization').textContent = avgUtilization.toFixed(1) + '%';
-            document.getElementById('militaryCount').textContent = militaryCount;
+            document.getElementById('titleICount').textContent = titleICount;
         }
 
-        // Show data table modal
+        // Placeholder functions for executive tools
+        function generateExecutiveSummary() {
+            alert('Executive Summary feature will generate a comprehensive report with key insights, capacity analysis, and strategic recommendations based on current filters.');
+        }
+
+        function showCustomReportBuilder() {
+            alert('Custom Report Builder will allow you to select specific fields and create tailored reports for different audiences.');
+        }
+
+        function shareCurrentView() {
+            alert('Share functionality will create a URL that preserves current filter settings for easy sharing with colleagues.');
+        }
+
         function showDataTable() {
-            const modal = document.getElementById('dataTableModal');
-            const tableHead = document.getElementById('tableHead');
-            const tableBody = document.getElementById('tableBody');
-            
-            // Clear existing content
-            tableHead.innerHTML = '';
-            tableBody.innerHTML = '';
-            
-            if (filteredData.length === 0) {
-                tableBody.innerHTML = '<tr><td colspan="100%">No data matches current filters</td></tr>';
-                modal.style.display = 'block';
-                return;
-            }
-            
-            // Create header row
-            const headers = ['School Name', 'Complex Area', 'ZIP', 'Pre-K Status', 'EOEL Program', 'Military', 'Title I', 'Utilization', 'Enrollment'];
-            const headerRow = document.createElement('tr');
-            headers.forEach(header => {
-                const th = document.createElement('th');
-                th.textContent = header;
-                headerRow.appendChild(th);
-            });
-            tableHead.appendChild(headerRow);
-            
-            // Create data rows
-            filteredData.forEach(school => {
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td>${school.nameofschool}</td>
-                    <td>${school.complexarea}</td>
-                    <td>${school.zipcode}</td>
-                    <td>${school.prekstatusofnoneoelschools}</td>
-                    <td>${school.eoelfundedfciloncampus}</td>
-                    <td>${school.militaryimpacted}</td>
-                    <td>${school.titlei2425}</td>
-                    <td>${school.siteutilization}</td>
-                    <td>${school.currentenrollmentsy2324} / ${school.sitecapacity}</td>
-                `;
-                tableBody.appendChild(row);
-            });
-            
-            modal.style.display = 'block';
+            alert('Data table view will display all filtered schools in a sortable, searchable table format.');
         }
 
-        // Close data table modal
-        function closeDataTable() {
-            document.getElementById('dataTableModal').style.display = 'none';
-        }
-
-        // Export filtered data to CSV
         function exportToCSV() {
             if (filteredData.length === 0) {
                 alert('No data to export. Please adjust your filters.');
                 return;
             }
             
-            const headers = Object.keys(filteredData[0]);
+            const headers = ['Name of School', 'Complex Area', 'Complex', 'Grades', 'EOEL PreK', 'EOEL Capacity', 'Title I (24-25)', 'Site Utilization', 'Current Enrollment (SY 24-25)', 'Site Capacity'];
             const csvContent = [
                 headers.join(','),
                 ...filteredData.map(row => headers.map(header => `"${row[header] || ''}"`).join(','))
@@ -749,51 +877,60 @@
             URL.revokeObjectURL(url);
         }
 
-        // Generate presentation view for stakeholders
-        function generatePresentationView() {
-            const modal = document.getElementById('presentationModal');
-            const content = document.getElementById('presentationContent');
+        // Executive Summary Generator
+        function generateExecutiveSummary() {
+            const modal = document.getElementById('executiveModal');
+            const content = document.getElementById('executiveContent');
             
             // Get current filter state for context
             const activeFilters = [];
             const complexArea = document.getElementById('complexArea').value;
-            const prekStatus = document.getElementById('prekStatus').value;
-            const militaryImpacted = document.getElementById('militaryImpacted').value;
+            const complex = document.getElementById('complex').value;
+            const gradeLevel = document.getElementById('gradeLevel').value;
+            const eoelStatus = document.getElementById('eoelStatus').value;
             const titleI = document.getElementById('titleI').value;
             const utilizationFilter = document.getElementById('utilizationFilter').value;
             
             if (complexArea) activeFilters.push(`Complex Area: ${complexArea}`);
-            if (prekStatus) activeFilters.push(`Pre-K Status: ${prekStatus}`);
-            if (militaryImpacted) activeFilters.push(`Military Impacted: ${militaryImpacted}`);
+            if (complex) activeFilters.push(`Complex: ${complex}`);
+            if (gradeLevel) activeFilters.push(`Grade Level: ${gradeLevel}`);
+            if (eoelStatus) activeFilters.push(`EOEL Status: ${eoelStatus}`);
             if (titleI) activeFilters.push(`Title I: ${titleI}`);
             if (utilizationFilter) activeFilters.push(`Utilization: ${utilizationFilter}`);
             
             // Calculate key metrics
             const totalSchools = filteredData.length;
-            const eoelCount = filteredData.filter(school => school.eoelfundedfciloncampus === 'Yes').length;
-            const militaryCount = filteredData.filter(school => school.militaryimpacted === 'Yes').length;
-            const titleICount = filteredData.filter(school => school.titlei2425 === 'Yes').length;
-            const avgUtilization = filteredData.length > 0 ? 
-                filteredData.reduce((sum, school) => sum + (parseFloat(school.siteutilization) || 0), 0) / filteredData.length : 0;
+            const eoelCount = filteredData.filter(school => 
+                school['EOEL PreK'] && school['EOEL PreK'].toLowerCase().includes('202')
+            ).length;
+            const titleICount = filteredData.filter(school => 
+                school['Title I (24-25)'] === 'YES'
+            ).length;
+            const totalEOELCapacity = filteredData.reduce((sum, school) => {
+                const capacity = parseInt(school['EOEL Capacity']) || 0;
+                return sum + capacity;
+            }, 0);
             
-            // Group by complex area for breakdown
+            // Complex Area breakdown
             const areaBreakdown = {};
             filteredData.forEach(school => {
-                if (!areaBreakdown[school.complexarea]) {
-                    areaBreakdown[school.complexarea] = { count: 0, eoel: 0, military: 0, titleI: 0, totalUtilization: 0 };
+                const area = school['Complex Area'] || 'Unknown';
+                if (!areaBreakdown[area]) {
+                    areaBreakdown[area] = { count: 0, eoel: 0, capacity: 0, titleI: 0 };
                 }
-                areaBreakdown[school.complexarea].count++;
-                if (school.eoelfundedfciloncampus === 'Yes') areaBreakdown[school.complexarea].eoel++;
-                if (school.militaryimpacted === 'Yes') areaBreakdown[school.complexarea].military++;
-                if (school.titlei2425 === 'Yes') areaBreakdown[school.complexarea].titleI++;
-                areaBreakdown[school.complexarea].totalUtilization += parseFloat(school.siteutilization) || 0;
+                areaBreakdown[area].count++;
+                if (school['EOEL PreK'] && school['EOEL PreK'].toLowerCase().includes('202')) {
+                    areaBreakdown[area].eoel++;
+                    areaBreakdown[area].capacity += parseInt(school['EOEL Capacity']) || 0;
+                }
+                if (school['Title I (24-25)'] === 'YES') areaBreakdown[area].titleI++;
             });
             
             content.innerHTML = `
                 <div style="padding: 2rem; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
                     <div style="text-align: center; margin-bottom: 2rem; border-bottom: 2px solid #667eea; padding-bottom: 1rem;">
-                        <h1 style="color: #2d3748; margin-bottom: 0.5rem;">Hawaii Early Childhood Education Overview</h1>
-                        <p style="color: #4a5568; font-size: 1.1rem;">EOEL Dashboard Analysis • Generated ${new Date().toLocaleDateString()}</p>
+                        <h1 style="color: #2d3748; margin-bottom: 0.5rem;">EOEL Hawaii Early Childhood Executive Summary</h1>
+                        <p style="color: #4a5568; font-size: 1.1rem;">Program Analysis • Generated ${new Date().toLocaleDateString()}</p>
                         ${activeFilters.length > 0 ? `<p style="color: #667eea; font-style: italic;">Filtered by: ${activeFilters.join(', ')}</p>` : ''}
                     </div>
                     
@@ -807,27 +944,27 @@
                             <div style="font-size: 1rem; opacity: 0.9;">EOEL Programs</div>
                         </div>
                         <div style="background: linear-gradient(135deg, #ed8936, #dd6b20); color: white; padding: 1.5rem; border-radius: 8px; text-align: center;">
-                            <div style="font-size: 2.5rem; font-weight: bold; margin-bottom: 0.5rem;">${avgUtilization.toFixed(0)}%</div>
-                            <div style="font-size: 1rem; opacity: 0.9;">Avg Utilization</div>
+                            <div style="font-size: 2.5rem; font-weight: bold; margin-bottom: 0.5rem;">${totalEOELCapacity}</div>
+                            <div style="font-size: 1rem; opacity: 0.9;">EOEL Capacity</div>
                         </div>
                         <div style="background: linear-gradient(135deg, #9f7aea, #805ad5); color: white; padding: 1.5rem; border-radius: 8px; text-align: center;">
-                            <div style="font-size: 2.5rem; font-weight: bold; margin-bottom: 0.5rem;">${militaryCount}</div>
-                            <div style="font-size: 1rem; opacity: 0.9;">Military Impacted</div>
+                            <div style="font-size: 2.5rem; font-weight: bold; margin-bottom: 0.5rem;">${titleICount}</div>
+                            <div style="font-size: 1rem; opacity: 0.9;">Title I Schools</div>
                         </div>
                     </div>
                     
                     <div style="margin-bottom: 2rem;">
-                        <h2 style="color: #2d3748; margin-bottom: 1rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.5rem;">Complex Area Breakdown</h2>
+                        <h2 style="color: #2d3748; margin-bottom: 1rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.5rem;">Complex Area Analysis</h2>
                         <div style="overflow-x: auto;">
                             <table style="width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
                                 <thead style="background: #f7fafc;">
                                     <tr>
                                         <th style="padding: 1rem; text-align: left; border-bottom: 1px solid #e2e8f0;">Complex Area</th>
-                                        <th style="padding: 1rem; text-align: center; border-bottom: 1px solid #e2e8f0;">Schools</th>
+                                        <th style="padding: 1rem; text-align: center; border-bottom: 1px solid #e2e8f0;">Total Schools</th>
                                         <th style="padding: 1rem; text-align: center; border-bottom: 1px solid #e2e8f0;">EOEL Programs</th>
-                                        <th style="padding: 1rem; text-align: center; border-bottom: 1px solid #e2e8f0;">Military Impacted</th>
-                                        <th style="padding: 1rem; text-align: center; border-bottom: 1px solid #e2e8f0;">Title I</th>
-                                        <th style="padding: 1rem; text-align: center; border-bottom: 1px solid #e2e8f0;">Avg Utilization</th>
+                                        <th style="padding: 1rem; text-align: center; border-bottom: 1px solid #e2e8f0;">EOEL Capacity</th>
+                                        <th style="padding: 1rem; text-align: center; border-bottom: 1px solid #e2e8f0;">Title I Schools</th>
+                                        <th style="padding: 1rem; text-align: center; border-bottom: 1px solid #e2e8f0;">Coverage %</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -836,9 +973,9 @@
                                             <td style="padding: 1rem; font-weight: 500;">${area}</td>
                                             <td style="padding: 1rem; text-align: center;">${data.count}</td>
                                             <td style="padding: 1rem; text-align: center;">${data.eoel}</td>
-                                            <td style="padding: 1rem; text-align: center;">${data.military}</td>
+                                            <td style="padding: 1rem; text-align: center;">${data.capacity}</td>
                                             <td style="padding: 1rem; text-align: center;">${data.titleI}</td>
-                                            <td style="padding: 1rem; text-align: center;">${(data.totalUtilization / data.count).toFixed(1)}%</td>
+                                            <td style="padding: 1rem; text-align: center;">${((data.eoel/data.count)*100).toFixed(1)}%</td>
                                         </tr>
                                     `).join('')}
                                 </tbody>
@@ -847,20 +984,34 @@
                     </div>
                     
                     <div style="margin-bottom: 2rem;">
-                        <h2 style="color: #2d3748; margin-bottom: 1rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.5rem;">Key Insights</h2>
+                        <h2 style="color: #2d3748; margin-bottom: 1rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.5rem;">Executive Insights</h2>
                         <div style="background: #f7fafc; padding: 1.5rem; border-radius: 8px; border-left: 4px solid #667eea;">
                             <ul style="margin: 0; padding-left: 1.5rem; line-height: 1.6;">
-                                <li style="margin-bottom: 0.5rem;"><strong>${((eoelCount/totalSchools)*100).toFixed(1)}%</strong> of schools have EOEL programs</li>
-                                <li style="margin-bottom: 0.5rem;"><strong>${((titleICount/totalSchools)*100).toFixed(1)}%</strong> are Title I schools</li>
-                                <li style="margin-bottom: 0.5rem;"><strong>${((militaryCount/totalSchools)*100).toFixed(1)}%</strong> are military-impacted</li>
-                                <li style="margin-bottom: 0.5rem;">Average site utilization: <strong>${avgUtilization.toFixed(1)}%</strong></li>
-                                <li><strong>${Object.keys(areaBreakdown).length}</strong> complex areas represented</li>
+                                <li style="margin-bottom: 0.5rem;"><strong>Program Coverage:</strong> ${((eoelCount/totalSchools)*100).toFixed(1)}% of schools have EOEL programs</li>
+                                <li style="margin-bottom: 0.5rem;"><strong>Total Early Learning Capacity:</strong> ${totalEOELCapacity} children served</li>
+                                <li style="margin-bottom: 0.5rem;"><strong>Title I Integration:</strong> ${((titleICount/totalSchools)*100).toFixed(1)}% are Title I schools</li>
+                                <li style="margin-bottom: 0.5rem;"><strong>Geographic Distribution:</strong> ${Object.keys(areaBreakdown).length} complex areas represented</li>
+                                <li><strong>Expansion Opportunities:</strong> ${totalSchools - eoelCount} schools without current EOEL programs</li>
                             </ul>
                         </div>
                     </div>
                     
+                    <div style="margin-bottom: 2rem;">
+                        <h2 style="color: #2d3748; margin-bottom: 1rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.5rem;">Strategic Recommendations</h2>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+                            <div style="background: #fff5f5; padding: 1.5rem; border-radius: 8px; border-left: 4px solid #e53e3e;">
+                                <h3 style="color: #c53030; margin-bottom: 1rem;">Priority Areas</h3>
+                                <p style="margin: 0; line-height: 1.5;">Focus expansion efforts on complex areas with low EOEL coverage and high Title I populations to maximize equity impact.</p>
+                            </div>
+                            <div style="background: #f0fff4; padding: 1.5rem; border-radius: 8px; border-left: 4px solid #38a169;">
+                                <h3 style="color: #2f855a; margin-bottom: 1rem;">Capacity Optimization</h3>
+                                <p style="margin: 0; line-height: 1.5;">Review underutilized school sites for potential EOEL program placement to maximize infrastructure efficiency.</p>
+                            </div>
+                        </div>
+                    </div>
+                    
                     <div style="text-align: center; margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #e2e8f0; color: #4a5568; font-size: 0.9rem;">
-                        <p>Generated by EOEL Dashboard • Hawaii Early Childhood Education Analysis</p>
+                        <p>Generated by EOEL Executive Dashboard • Hawaii Department of Education</p>
                         <p>For questions contact: EOEL Data Team</p>
                     </div>
                 </div>
@@ -869,26 +1020,28 @@
             modal.style.display = 'block';
         }
 
-        // Show custom data builder
-        function showCustomDataBuilder() {
-            const modal = document.getElementById('customDataModal');
+        function showCustomReportBuilder() {
+            const modal = document.getElementById('customReportModal');
             const fieldSelector = document.getElementById('fieldSelector');
             
-            // Define all available fields with user-friendly names
+            // Define available fields with user-friendly names based on actual data
             const fieldMappings = {
-                'nameofschool': 'School Name',
-                'complexarea': 'Complex Area',
-                'zipcode': 'ZIP Code',
-                'prekstatusofnoneoelschools': 'Pre-K Status',
-                'militaryimpacted': 'Military Impacted',
-                'titlei2425': 'Title I Status',
-                'siteutilization': 'Site Utilization',
-                'currentenrollmentsy2324': 'Current Enrollment',
-                'sitecapacity': 'Site Capacity',
-                'eoelfundedfciloncampus': 'EOEL Program On Campus',
-                'eoelcapacity': 'EOEL Capacity',
-                'principalemail': 'Principal Email',
-                'grades': 'Grade Levels'
+                'Name of School': 'School Name',
+                'School Code': 'School Code',
+                'Complex Area': 'Complex Area',
+                'Complex': 'Complex',
+                'Grades': 'Grade Levels',
+                'EOEL PreK': 'EOEL Program Year',
+                'EOEL Capacity': 'EOEL Capacity',
+                '# EOEL Rooms': 'Number of EOEL Rooms',
+                'Title I (24-25)': 'Title I Status',
+                'Site Capacity': 'Site Capacity',
+                'Site Utilization': 'Site Utilization',
+                'Current Enrollment (SY 24-25)': 'Current Enrollment',
+                'English LanguageLearners': 'English Language Learners',
+                'Zip Code': 'ZIP Code',
+                'Principal': 'Principal Name',
+                'Principal Email': 'Principal Email'
             };
             
             fieldSelector.innerHTML = '';
@@ -908,7 +1061,6 @@
             modal.style.display = 'block';
         }
 
-        // Share current view
         function shareCurrentView() {
             const modal = document.getElementById('shareModal');
             const shareURL = document.getElementById('shareURL');
@@ -917,14 +1069,16 @@
             // Create URL with current filter parameters
             const params = new URLSearchParams();
             const complexArea = document.getElementById('complexArea').value;
-            const prekStatus = document.getElementById('prekStatus').value;
-            const militaryImpacted = document.getElementById('militaryImpacted').value;
+            const complex = document.getElementById('complex').value;
+            const gradeLevel = document.getElementById('gradeLevel').value;
+            const eoelStatus = document.getElementById('eoelStatus').value;
             const titleI = document.getElementById('titleI').value;
             const utilizationFilter = document.getElementById('utilizationFilter').value;
             
             if (complexArea) params.append('complexArea', complexArea);
-            if (prekStatus) params.append('prekStatus', prekStatus);
-            if (militaryImpacted) params.append('militaryImpacted', militaryImpacted);
+            if (complex) params.append('complex', complex);
+            if (gradeLevel) params.append('gradeLevel', gradeLevel);
+            if (eoelStatus) params.append('eoelStatus', eoelStatus);
             if (titleI) params.append('titleI', titleI);
             if (utilizationFilter) params.append('utilizationFilter', utilizationFilter);
             
@@ -935,34 +1089,37 @@
             // Create email template
             const filterSummary = [];
             if (complexArea) filterSummary.push(`Complex Area: ${complexArea}`);
-            if (prekStatus) filterSummary.push(`Pre-K Status: ${prekStatus}`);
-            if (militaryImpacted) filterSummary.push(`Military Impacted: ${militaryImpacted}`);
+            if (complex) filterSummary.push(`Complex: ${complex}`);
+            if (gradeLevel) filterSummary.push(`Grade Level: ${gradeLevel}`);
+            if (eoelStatus) filterSummary.push(`EOEL Status: ${eoelStatus}`);
             if (titleI) filterSummary.push(`Title I: ${titleI}`);
             if (utilizationFilter) filterSummary.push(`Utilization: ${utilizationFilter}`);
             
             const totalSchools = filteredData.length;
-            const eoelCount = filteredData.filter(school => school.eoelfundedfciloncampus === 'Yes').length;
+            const eoelCount = filteredData.filter(school => 
+                school['EOEL PreK'] && school['EOEL PreK'].toLowerCase().includes('202')
+            ).length;
             
-            emailTemplate.value = `Subject: Hawaii Early Childhood Education Data - Dashboard View
+            emailTemplate.value = `Subject: EOEL Hawaii Early Childhood Data - Dashboard View
 
-Hi [Stakeholder Name],
+Hi [Colleague Name],
 
-I've prepared a customized view of our Hawaii early childhood education data for your review:
+I've prepared a customized view of our EOEL Hawaii early childhood education data for your review:
 
 ${filterSummary.length > 0 ? `Applied Filters: ${filterSummary.join(', ')}` : 'Showing all schools in dataset'}
 
 Key Summary:
 • Total Schools: ${totalSchools}
 • EOEL Programs: ${eoelCount}
-• Military Impacted: ${filteredData.filter(school => school.militaryimpacted === 'Yes').length}
+• EOEL Coverage: ${((eoelCount/totalSchools)*100).toFixed(1)}%
 
 View the interactive dashboard here: ${fullURL}
 
 The dashboard allows you to:
 - View all schools on an interactive Hawaii map
-- Filter by various criteria
+- Filter by complex area, EOEL status, utilization, and more
+- Generate executive summaries and custom reports
 - Export data for further analysis
-- Generate presentation-ready summaries
 
 Please let me know if you need any additional analysis or have questions about the data.
 
@@ -972,43 +1129,84 @@ EOEL Team`;
             modal.style.display = 'block';
         }
 
-        // Generate custom dataset
-        function generateCustomDataset() {
-            const checkboxes = document.querySelectorAll('#fieldSelector input[type="checkbox"]:checked');
-            const selectedFields = Array.from(checkboxes).map(cb => cb.value);
-            const datasetName = document.getElementById('datasetName').value || 'Custom_Dataset';
-            const datasetNotes = document.getElementById('datasetNotes').value;
+        function showDataTable() {
+            const modal = document.getElementById('dataTableModal');
+            const tableHead = document.getElementById('tableHead');
+            const tableBody = document.getElementById('tableBody');
             
-            if (selectedFields.length === 0) {
-                alert('Please select at least one field to include in your dataset.');
+            tableHead.innerHTML = '';
+            tableBody.innerHTML = '';
+            
+            if (filteredData.length === 0) {
+                tableBody.innerHTML = '<tr><td colspan="100%">No data matches current filters</td></tr>';
+                modal.style.display = 'block';
                 return;
             }
             
-            // Create CSV content with selected fields
-            const headers = selectedFields;
+            // Create header row with key EOEL fields
+            const headers = ['School Name', 'Complex Area', 'Complex', 'Grades', 'EOEL Program', 'EOEL Capacity', 'Title I', 'Utilization', 'Enrollment'];
+            const headerRow = document.createElement('tr');
+            headers.forEach(header => {
+                const th = document.createElement('th');
+                th.textContent = header;
+                headerRow.appendChild(th);
+            });
+            tableHead.appendChild(headerRow);
+            
+            // Create data rows
+            filteredData.forEach(school => {
+                const row = document.createElement('tr');
+                const hasEOEL = school['EOEL PreK'] && school['EOEL PreK'].toLowerCase().includes('202');
+                row.innerHTML = `
+                    <td>${school['Name of School'] || ''}</td>
+                    <td>${school['Complex Area'] || ''}</td>
+                    <td>${school['Complex'] || ''}</td>
+                    <td>${school['Grades'] || ''}</td>
+                    <td>${hasEOEL ? '✅ Yes' : '❌ No'}</td>
+                    <td>${school['EOEL Capacity'] || 'N/A'}</td>
+                    <td>${school['Title I (24-25)'] || 'N/A'}</td>
+                    <td>${school['Site Utilization'] || 'N/A'}</td>
+                    <td>${school['Current Enrollment (SY 24-25)'] || 'N/A'} / ${school['Site Capacity'] || 'N/A'}</td>
+                `;
+                tableBody.appendChild(row);
+            });
+            
+            modal.style.display = 'block';
+        }
+
+        // Modal helper functions
+        function generateCustomReport() {
+            const checkboxes = document.querySelectorAll('#fieldSelector input[type="checkbox"]:checked');
+            const selectedFields = Array.from(checkboxes).map(cb => cb.value);
+            const reportName = document.getElementById('reportName').value || 'EOEL_Custom_Report';
+            const reportNotes = document.getElementById('reportNotes').value;
+            
+            if (selectedFields.length === 0) {
+                alert('Please select at least one field to include in your report.');
+                return;
+            }
+            
             const csvContent = [
-                `# ${datasetName}`,
+                `# ${reportName}`,
                 `# Generated: ${new Date().toLocaleString()}`,
                 `# Records: ${filteredData.length}`,
-                datasetNotes ? `# Notes: ${datasetNotes}` : '',
+                reportNotes ? `# Notes: ${reportNotes}` : '',
                 '', // Empty line
-                headers.join(','),
-                ...filteredData.map(row => headers.map(header => `"${row[header] || ''}"`).join(','))
+                selectedFields.join(','),
+                ...filteredData.map(row => selectedFields.map(field => `"${row[field] || ''}"`).join(','))
             ].filter(line => line !== '').join('\n');
             
-            // Download the file
             const blob = new Blob([csvContent], { type: 'text/csv' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `${datasetName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`;
+            a.download = `${reportName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`;
             a.click();
             URL.revokeObjectURL(url);
             
-            closeCustomDataBuilder();
+            closeCustomReportBuilder();
         }
 
-        // Helper functions for modals
         function selectAllFields() {
             const checkboxes = document.querySelectorAll('#fieldSelector input[type="checkbox"]');
             checkboxes.forEach(cb => cb.checked = true);
@@ -1043,16 +1241,20 @@ EOEL Team`;
             alert('Email template copied to clipboard!');
         }
 
-        function printPresentation() {
+        function printExecutiveSummary() {
             window.print();
         }
 
-        function closeCustomDataBuilder() {
-            document.getElementById('customDataModal').style.display = 'none';
+        function closeDataTable() {
+            document.getElementById('dataTableModal').style.display = 'none';
         }
 
-        function closePresentationMode() {
-            document.getElementById('presentationModal').style.display = 'none';
+        function closeExecutiveSummary() {
+            document.getElementById('executiveModal').style.display = 'none';
+        }
+
+        function closeCustomReportBuilder() {
+            document.getElementById('customReportModal').style.display = 'none';
         }
 
         function closeShareModal() {
@@ -1064,29 +1266,32 @@ EOEL Team`;
             const params = new URLSearchParams(window.location.search);
             
             if (params.get('complexArea')) document.getElementById('complexArea').value = params.get('complexArea');
-            if (params.get('prekStatus')) document.getElementById('prekStatus').value = params.get('prekStatus');
-            if (params.get('militaryImpacted')) document.getElementById('militaryImpacted').value = params.get('militaryImpacted');
+            if (params.get('complex')) document.getElementById('complex').value = params.get('complex');
+            if (params.get('gradeLevel')) document.getElementById('gradeLevel').value = params.get('gradeLevel');
+            if (params.get('eoelStatus')) document.getElementById('eoelStatus').value = params.get('eoelStatus');
             if (params.get('titleI')) document.getElementById('titleI').value = params.get('titleI');
             if (params.get('utilizationFilter')) document.getElementById('utilizationFilter').value = params.get('utilizationFilter');
             
-            // Apply filters if any were loaded from URL
             if (params.toString()) {
                 applyFilters();
             }
         }
 
-        // Close modal when clicking outside
+        // Close modals when clicking outside
         window.onclick = function(event) {
-            const modal = document.getElementById('dataTableModal');
-            if (event.target === modal) {
-                closeDataTable();
-            }
+            const modals = ['dataTableModal', 'executiveModal', 'customReportModal', 'shareModal'];
+            modals.forEach(modalId => {
+                const modal = document.getElementById(modalId);
+                if (event.target === modal) {
+                    modal.style.display = 'none';
+                }
+            });
         }
 
         // Initialize dashboard when page loads
         document.addEventListener('DOMContentLoaded', function() {
             initDashboard();
-            loadURLParameters(); // Load any shared view parameters
+            loadURLParameters();
         });
     </script>
 </body>
