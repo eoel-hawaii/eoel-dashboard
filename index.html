@@ -725,64 +725,67 @@ Paste CSV data here:`);
             }
         }
 
-        // Simple but reliable CSV parser - back to basics
+        // Back to basics - simple and reliable CSV parser
         function parseCSV(csvText) {
-            const lines = csvText.split('\n').filter(line => line.trim());
+            console.log('🔍 Raw CSV length:', csvText.length);
+            console.log('🔍 First 200 chars:', csvText.substring(0, 200));
             
-            if (lines.length < 3) {
-                console.error('CSV has insufficient data rows');
+            const lines = csvText.split('\n');
+            console.log('🔍 Total lines in file:', lines.length);
+            
+            // Find the actual header row - look for "Name of School"
+            let headerRowIndex = -1;
+            for (let i = 0; i < Math.min(5, lines.length); i++) {
+                if (lines[i].includes('Name of School')) {
+                    headerRowIndex = i;
+                    break;
+                }
+            }
+            
+            if (headerRowIndex === -1) {
+                console.error('❌ Could not find header row with "Name of School"');
                 return [];
             }
             
-            console.log('📋 Total lines in CSV:', lines.length);
-            console.log('📋 Line 1 (metadata):', lines[0].substring(0, 100));
-            console.log('📋 Line 2 (headers):', lines[1].substring(0, 100));
-            console.log('📋 Line 3 (first data):', lines[2].substring(0, 100));
+            console.log('✅ Found headers at row:', headerRowIndex + 1);
             
-            // For EOEL sheet: Row 2 has headers (index 1)
-            const headerLine = lines[1];
-            const headers = headerLine.split(',').map(h => h.replace(/^"|"$/g, '').trim());
+            // Parse headers
+            const headerLine = lines[headerRowIndex];
+            const headers = headerLine.split(',').map(h => h.replace(/"/g, '').trim());
             
-            console.log('📋 Found headers:', headers.length, 'columns');
+            console.log('📋 Header count:', headers.length);
             console.log('📋 First 10 headers:', headers.slice(0, 10));
-            console.log('📋 Last 10 headers:', headers.slice(-10));
+            console.log('📋 Headers containing "EOEL":', headers.filter(h => h.toLowerCase().includes('eoel')));
             
             const data = [];
             
-            // Start from row 3 (index 2) since row 1 is metadata, row 2 is headers
-            for (let i = 2; i < lines.length; i++) {
+            // Parse data rows starting after headers
+            for (let i = headerRowIndex + 1; i < lines.length; i++) {
                 const line = lines[i].trim();
-                if (!line || line.startsWith(',,,')) continue; // Skip empty rows
+                if (!line) continue;
                 
-                // Simple split - we'll handle quotes later if needed
-                const values = line.split(',').map(v => v.replace(/^"|"$/g, '').trim());
+                const values = line.split(',').map(v => v.replace(/"/g, '').trim());
                 
-                // Only process if we have a reasonable number of columns
-                if (values.length < 10) {
-                    console.log('⚠️ Skipping row', i, '- too few columns:', values.length);
-                    continue;
+                // Create row object
+                const row = {};
+                for (let j = 0; j < headers.length; j++) {
+                    row[headers[j]] = values[j] || '';
                 }
                 
-                const row = {};
-                headers.forEach((header, index) => {
-                    row[header] = values[index] || '';
-                });
-                
-                // Basic filtering: must have school name
+                // Only include if has school name
                 const schoolName = row['Name of School'] || '';
-                if (schoolName && schoolName.trim() && schoolName !== 'Name of School') {
+                if (schoolName && schoolName !== 'Name of School') {
                     data.push(row);
-                    
-                    // Log first few schools for debugging
-                    if (data.length <= 3) {
-                        console.log(`🏫 School ${data.length}:`, schoolName, '- Fields:', Object.keys(row).length);
-                    }
                 }
             }
             
-            console.log('🏫 Total parsed schools:', data.length);
+            console.log('🏫 Total schools parsed:', data.length);
+            
             if (data.length > 0) {
-                console.log('🔍 Sample school keys:', Object.keys(data[0]).slice(0, 15));
+                console.log('🔍 First school:', data[0]['Name of School']);
+                console.log('🔍 Fields in first school:', Object.keys(data[0]).length);
+                console.log('🔍 ZIP code of first school:', data[0]['Zip Code'] || data[0]['ZIP Code']);
+                console.log('🔍 EOEL fields:', Object.keys(data[0]).filter(k => k.toLowerCase().includes('eoel')));
             }
             
             return data;
