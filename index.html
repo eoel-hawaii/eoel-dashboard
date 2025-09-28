@@ -66,7 +66,7 @@
         </div>
         <div class="filter-group">
           <label for="gradeLevel">Grades:</label>
-          <!-- now fully data-driven; just the default -->
+          <!-- fully data-driven -->
           <select id="gradeLevel"><option value="">All Levels</option></select>
         </div>
         <div class="filter-group">
@@ -228,84 +228,63 @@
   <script>
     // ---------- Name/Address Geocoding Helpers (no sheet changes required) ----------
 
-// Build a best-possible geocode query string from row fields we already have.
-// We DON'T need new columns; we try existing ones. If you don't have City, it's fine.
-function buildGeocodeQuery(row) {
-  const zip = (row['Zip Code'] || row['ZIP Code'] || '').toString().trim();
-  const zip5 = (zip.match(/\b(\d{5})\b/) || [,''])[1] || '';
-  const partsAddr = [
-    row['Street Address'],      // if present (some rows might already have it)
-    row['City'],                // if present
-    'HI',
-    zip5
-  ].filter(Boolean);
-
-  if (partsAddr.length >= 2) return partsAddr.join(', ');
-
-  const partsByNameCity = [
-    row['Name of School'],
-    row['City'],                // if missing, this line will be skipped below
-    'HI'
-  ].filter(Boolean);
-  if (partsByNameCity.length >= 2) return partsByNameCity.join(', ');
-
-  const byNameHI = [row['Name of School'], 'Hawaii'].filter(Boolean).join(', ');
-  if (byNameHI) return byNameHI;
-
-  return zip5 || null; // last resort
-}
-
-// Very small manual overrides for edge cases (optional, add as you discover issues)
-const MANUAL_COORD_OVERRIDES = {
-  // "Exact School Name As In Sheet": { lat: 21.3069, lng: -157.8583 },
-  // "Another School Name": { lat: 20.8893, lng: -156.4729 },
-};
-
-// Local cache so you don't re-geocode the same schools every load
-function getGeoCache(key) {
-  try { const raw = localStorage.getItem('geo:'+key); return raw ? JSON.parse(raw) : null; } catch { return null; }
-}
-function setGeoCache(key, coord) {
-  try { localStorage.setItem('geo:'+key, JSON.stringify(coord)); } catch {}
-}
-
-// Respectful Nominatim usage: 1 request per ~1.1s, include an email param.
-const NOMINATIM_BASE = 'https://nominatim.openstreetmap.org/search';
-const USER_EMAIL = 'you@example.com';  // <-- set to your contact email
-let geocodeQueue = Promise.resolve();  // serialize calls
-
-async function geocodeNominatim(q) {
-  const cached = getGeoCache(q);
-  if (cached) return cached;
-
-  // queue with 1.1s delay between requests
-  geocodeQueue = geocodeQueue.then(() => new Promise(async (resolve) => {
-    try {
-      await new Promise(r => setTimeout(r, 1100));
-      const url = `${NOMINATIM_BASE}?format=jsonv2&q=${encodeURIComponent(q)}&addressdetails=0&limit=1&email=${encodeURIComponent(USER_EMAIL)}`;
-      const res = await fetch(url, { headers: { 'Accept': 'application/json' }});
-      if (!res.ok) throw new Error(`Geocode HTTP ${res.status}`);
-      const results = await res.json();
-      if (Array.isArray(results) && results.length) {
-        const { lat, lon } = results[0];
-        const coord = { lat: parseFloat(lat), lng: parseFloat(lon) };
-        setGeoCache(q, coord);
-        resolve(coord);
-      } else {
-        resolve(null);
-      }
-    } catch {
-      resolve(null);
+    function buildGeocodeQuery(row) {
+      const zip = (row['Zip Code'] || row['ZIP Code'] || '').toString().trim();
+      const zip5 = (zip.match(/\b(\d{5})\b/) || [,''])[1] || '';
+      const partsAddr = [row['Street Address'], row['City'], 'HI', zip5].filter(Boolean);
+      if (partsAddr.length >= 2) return partsAddr.join(', ');
+      const partsByNameCity = [row['Name of School'], row['City'], 'HI'].filter(Boolean);
+      if (partsByNameCity.length >= 2) return partsByNameCity.join(', ');
+      const byNameHI = [row['Name of School'], 'Hawaii'].filter(Boolean).join(', ');
+      if (byNameHI) return byNameHI;
+      return zip5 || null;
     }
-  }));
-  return geocodeQueue;
-}
 
-// A convenience to clear the cache if you need to re-run geocoding during dev
-function clearGeocodeCache() {
-  Object.keys(localStorage).forEach(k => { if (k.startsWith('geo:')) localStorage.removeItem(k); });
-  alert('Geocode cache cleared.');
-}
+    const MANUAL_COORD_OVERRIDES = {
+      // "Exact School Name As In Sheet": { lat: 21.3069, lng: -157.8583 },
+    };
+
+    function getGeoCache(key) { try { const raw = localStorage.getItem('geo:'+key); return raw ? JSON.parse(raw) : null; } catch { return null; } }
+    function setGeoCache(key, coord) { try { localStorage.setItem('geo:'+key, JSON.stringify(coord)); } catch {} }
+
+    const NOMINATIM_BASE = 'https://nominatim.openstreetmap.org/search';
+    const USER_EMAIL = 'you@example.com';  // <-- set to your contact email
+    let geocodeQueue = Promise.resolve();
+
+    async function geocodeNominatim(q) {
+      const cached = getGeoCache(q);
+      if (cached) return cached;
+      geocodeQueue = geocodeQueue.then(() => new Promise(async (resolve) => {
+        try {
+          await new Promise(r => setTimeout(r, 1100));
+          const url = `${NOMINATIM_BASE}?format=jsonv2&q=${encodeURIComponent(q)}&addressdetails=0&limit=1&email=${encodeURIComponent(USER_EMAIL)}`;
+          const res = await fetch(url, { headers: { 'Accept': 'application/json' }});
+          if (!res.ok) throw new Error(`Geocode HTTP ${res.status}`);
+          const results = await res.json();
+          if (Array.isArray(results) && results.length) {
+            const { lat, lon } = results[0];
+            const coord = { lat: parseFloat(lat), lng: parseFloat(lon) };
+            setGeoCache(q, coord);
+            resolve(coord);
+          } else {
+            resolve(null);
+          }
+        } catch {
+          resolve(null);
+        }
+      }));
+      return geocodeQueue;
+    }
+
+    function clearGeocodeCache() {
+      Object.keys(localStorage).forEach(k => { if (k.startsWith('geo:')) localStorage.removeItem(k); });
+      alert('Geocode cache cleared.');
+    }
+
+    // Wait for any queued geocoding to finish
+    function drainGeocodeQueue() {
+      return (geocodeQueue && typeof geocodeQueue.then === 'function') ? geocodeQueue.catch(()=>{}) : Promise.resolve();
+    }
 
     // ---------------- Globals ----------------
     let map;
@@ -321,17 +300,13 @@ function clearGeocodeCache() {
     // ---------------- Helpers ----------------
     function normGrades(v) {
       if (v == null) return "";
-      return String(v)
-        .replace(/\u2013|\u2014/g, "-") // en/em dash -> hyphen
-        .replace(/\s+/g, " ")
-        .trim();
+      return String(v).replace(/\u2013|\u2014/g, "-").replace(/\s+/g, " ").trim();
     }
     function zip5(z) {
       const m = String(z || "").match(/\b(\d{5})\b/);
       return m ? m[1] : "";
     }
 
-    // Header normalization & mapping (from earlier version)
     function normalizeHeader(h) {
       return (h || "")
         .replace(/\uFEFF/g, "")
@@ -446,15 +421,30 @@ function clearGeocodeCache() {
       return out;
     }
 
+    // ---------------- Title I from Free/Reduced Lunch % ----------------
+    const TITLEI_FIELD = 'Title I (24-25)'; // this column contains the percent
+    const TITLEI_THRESHOLD = 47.2;
+
+    function titleIPercent(row){
+      const v = row[TITLEI_FIELD];
+      if (v==null || String(v).trim()==="") return null;
+      const n = parseFloat(String(v).replace(/,/g,'').replace('%',''));
+      return Number.isFinite(n) ? n : null;
+    }
+    function isTitleI(row){
+      const p = titleIPercent(row);
+      return p!=null && p >= TITLEI_THRESHOLD;
+    }
+
     // ---------------- Sample data (fallback) ----------------
     function loadSampleData(){
       schoolsData = [
-        {"Name of School":"Wailuku Elementary School","School Code":"425","Complex Area":"Baldwin-Kekaulike-Kūlanihākoʻi-Maui","Complex":"Baldwin","Grades":"K-5","EOEL PreK":"2023 2024","EOEL Capacity":"40","# EOEL Rooms":"2","Title I (24-25)":"YES","Site Capacity":"789","Site Utilization":"67.81%","Current Enrollment (SY 24-25)":"535","English Language Learners":"18.00%","Zip Code":"96793","Principal":"Dr. Nikan Arapoff","Principal Email":"Nikan.Arapoff@k12.hi.us"},
-        {"Name of School":"Kahului Elementary School","School Code":"405","Complex Area":"Baldwin-Kekaulike-Kūlanihākoʻi-Maui","Complex":"Maui","Grades":"K-5","EOEL PreK":"","EOEL Capacity":"","# EOEL Rooms":"0","Title I (24-25)":"NO","Site Capacity":"825","Site Utilization":"94.30%","Current Enrollment (SY 24-25)":"778","English Language Learners":"18.00%","Zip Code":"96732","Principal":"Suzanne Forbes","Principal Email":"Suzanne.Forbes@k12.hi.us"},
-        {"Name of School":"Barbers Point Elementary School","School Code":"251","Complex Area":"Campbell-Kapolei","Complex":"Kapolei","Grades":"K-5","EOEL PreK":"2025 (1)","EOEL Capacity":"20","# EOEL Rooms":"1","Title I (24-25)":"NO","Site Capacity":"584","Site Utilization":"88.01%","Current Enrollment (SY 24-25)":"514","English Language Learners":"27.00%","Zip Code":"96707","Principal":"Aaron Okumura","Principal Email":"aaron.okumura@k12.hi.us"},
-        {"Name of School":"Hauʻula Elementary School","School Code":"303","Complex Area":"Castle-Kahuku","Complex":"Kahuku","Grades":"K-6","EOEL PreK":"2025 (2)","EOEL Capacity":"40","# EOEL Rooms":"2","Title I (24-25)":"NO","Site Capacity":"330","Site Utilization":"113.64%","Current Enrollment (SY 24-25)":"375","English Language Learners":"16.00%","Zip Code":"96717","Principal":"Uilani Kaitoku","Principal Email":"Uilani.Kaitoku@k12.hi.us"},
-        {"Name of School":"Hilo High School","School Code":"355","Complex Area":"Hilo-Waiākea","Complex":"Hilo","Grades":"9-12","EOEL PreK":"","EOEL Capacity":"","# EOEL Rooms":"0","Title I (24-25)":"NO","Site Capacity":"1070","Site Utilization":"109.35%","Current Enrollment (SY 24-25)":"1170","English Language Learners":"25.00%","Zip Code":"96720","Principal":"Jasmine Urasaki","Principal Email":"Jasmine.Urasaki@k12.hi.us"},
-        {"Name of School":"Lāna'i High & Elementary School","School Code":"415","Complex Area":"Hāna-Lahainaluna-Lānaʻi-Molokai","Complex":"Lānaʻi","Grades":"K-12","EOEL PreK":"2014 - E 2024 - H","EOEL Capacity":"37","# EOEL Rooms":"2","Title I (24-25)":"NO","Site Capacity":"624","Site Utilization":"91.67%","Current Enrollment (SY 24-25)":"572","English Language Learners":"17.00%","Zip Code":"96763","Principal":"Douglas Boyer","Principal Email":"Douglas.Boyer@k12.hi.us"}
+        {"Name of School":"Wailuku Elementary School","School Code":"425","Complex Area":"Baldwin-Kekaulike-Kūlanihākoʻi-Maui","Complex":"Baldwin","Grades":"K-5","EOEL PreK":"2023 2024","EOEL Capacity":"40","# EOEL Rooms":"2","Title I (24-25)":"60%","Site Capacity":"789","Site Utilization":"67.81%","Current Enrollment (SY 24-25)":"535","English Language Learners":"18.00%","Zip Code":"96793","Principal":"Dr. Nikan Arapoff","Principal Email":"Nikan.Arapoff@k12.hi.us"},
+        {"Name of School":"Kahului Elementary School","School Code":"405","Complex Area":"Baldwin-Kekaulike-Kūlanihākoʻi-Maui","Complex":"Maui","Grades":"K-5","EOEL PreK":"","EOEL Capacity":"","# EOEL Rooms":"0","Title I (24-25)":"30%","Site Capacity":"825","Site Utilization":"94.30%","Current Enrollment (SY 24-25)":"778","English Language Learners":"18.00%","Zip Code":"96732","Principal":"Suzanne Forbes","Principal Email":"Suzanne.Forbes@k12.hi.us"},
+        {"Name of School":"Barbers Point Elementary School","School Code":"251","Complex Area":"Campbell-Kapolei","Complex":"Kapolei","Grades":"K-5","EOEL PreK":"2025 (1)","EOEL Capacity":"20","# EOEL Rooms":"1","Title I (24-25)":"40%","Site Capacity":"584","Site Utilization":"88.01%","Current Enrollment (SY 24-25)":"514","English Language Learners":"27.00%","Zip Code":"96707","Principal":"Aaron Okumura","Principal Email":"aaron.okumura@k12.hi.us"},
+        {"Name of School":"Hauʻula Elementary School","School Code":"303","Complex Area":"Castle-Kahuku","Complex":"Kahuku","Grades":"K-6","EOEL PreK":"2025 (2)","EOEL Capacity":"40","# EOEL Rooms":"2","Title I (24-25)":"55%","Site Capacity":"330","Site Utilization":"113.64%","Current Enrollment (SY 24-25)":"375","English Language Learners":"16.00%","Zip Code":"96717","Principal":"Uilani Kaitoku","Principal Email":"Uilani.Kaitoku@k12.hi.us"},
+        {"Name of School":"Hilo High School","School Code":"355","Complex Area":"Hilo-Waiākea","Complex":"Hilo","Grades":"9-12","EOEL PreK":"","EOEL Capacity":"","# EOEL Rooms":"0","Title I (24-25)":"20%","Site Capacity":"1070","Site Utilization":"109.35%","Current Enrollment (SY 24-25)":"1170","English Language Learners":"25.00%","Zip Code":"96720","Principal":"Jasmine Urasaki","Principal Email":"Jasmine.Urasaki@k12.hi.us"},
+        {"Name of School":"Lāna'i High & Elementary School","School Code":"415","Complex Area":"Hāna-Lahainaluna-Lānaʻi-Molokai","Complex":"Lānaʻi","Grades":"K-12","EOEL PreK":"2014 - E 2024 - H","EOEL Capacity":"37","# EOEL Rooms":"2","Title I (24-25)":"49%","Site Capacity":"624","Site Utilization":"91.67%","Current Enrollment (SY 24-25)":"572","English Language Learners":"17.00%","Zip Code":"96763","Principal":"Douglas Boyer","Principal Email":"Douglas.Boyer@k12.hi.us"}
       ];
       filteredData = [...schoolsData];
     }
@@ -486,16 +476,16 @@ function clearGeocodeCache() {
         for (const r of dataRows){
           const row = normalizeRow(r, rawHeaders);
           const schoolName = row["Name of School"] || "";
-          const schoolCode = row["School Code"] || "";
-          if (!schoolName.trim() || !/^\d+$/.test(String(schoolCode).trim())) continue;
-          if (/^total/i.test(schoolName)) continue;
+          if (!schoolName.trim()) continue;                 // keep any named school
+          if (/^total\b/i.test(schoolName)) continue;       // skip totals/summary rows
           cleaned.push(row);
         }
 
         schoolsData = cleaned;
         filteredData = [...schoolsData];
-        populateFilters();     // now builds Grades from actual strings
-        await geocodeSchools();// safer geocoding
+        populateFilters();
+        await geocodeSchools();
+        await drainGeocodeQueue(); // ensure all queued lookups settled
         displayMarkers();
         updateStats();
 
@@ -539,52 +529,37 @@ function clearGeocodeCache() {
     };
 
     async function geocodeSchools() {
-  const unresolved = [];
+      const unresolved = [];
+      for (const s of schoolsData) {
+        const ov = MANUAL_COORD_OVERRIDES[s['Name of School']];
+        if (ov && Number.isFinite(ov.lat) && Number.isFinite(ov.lng)) { s.lat = ov.lat; s.lng = ov.lng; continue; }
 
-  for (const s of schoolsData) {
-    // Manual override first (exact match on Name)
-    const ov = MANUAL_COORD_OVERRIDES[s['Name of School']];
-    if (ov && Number.isFinite(ov.lat) && Number.isFinite(ov.lng)) {
-      s.lat = ov.lat; s.lng = ov.lng; continue;
-    }
+        const lat = parseFloat(s['Latitude'] ?? s['Lat']);
+        const lng = parseFloat(s['Longitude'] ?? s['Lng'] ?? s['Long']);
+        if (Number.isFinite(lat) && Number.isFinite(lng)) { s.lat = lat; s.lng = lng; continue; }
 
-    // Prefer stored lat/lng if you already have some rows with these fields
-    const lat = parseFloat(s['Latitude'] ?? s['Lat']);
-    const lng = parseFloat(s['Longitude'] ?? s['Lng'] ?? s['Long']);
-    if (Number.isFinite(lat) && Number.isFinite(lng)) {
-      s.lat = lat; s.lng = lng; continue;
-    }
+        const q = buildGeocodeQuery(s);
+        if (q) { unresolved.push({ row: s, q }); }
+        else {
+          const zip = (s['Zip Code'] || s['ZIP Code'] || '').toString().trim();
+          const z5 = (zip.match(/\b(\d{5})\b/) || [,''])[1];
+          const centroid = z5 && hawaiiZipCoords[z5] ? hawaiiZipCoords[z5] : null;
+          if (centroid) { s.lat = centroid.lat; s.lng = centroid.lng; } else { s.lat = null; s.lng = null; }
+        }
+      }
 
-    // Build a query from what we DO have (no sheet edits required)
-    const q = buildGeocodeQuery(s);
-    if (q) {
-      unresolved.push({ row: s, q });
-    } else {
-      // REALLY nothing to go on → fall back to ZIP centroid (if present), else skip
-      const zip = (s['Zip Code'] || s['ZIP Code'] || '').toString().trim();
-      const z5 = (zip.match(/\b(\d{5})\b/) || [,''])[1];
-      const centroid = z5 && hawaiiZipCoords[z5] ? hawaiiZipCoords[z5] : null;
-      if (centroid) { s.lat = centroid.lat; s.lng = centroid.lng; }
-      else { s.lat = null; s.lng = null; }
+      for (const item of unresolved) {
+        const coord = await geocodeNominatim(item.q);
+        if (coord && Number.isFinite(coord.lat) && Number.isFinite(coord.lng)) {
+          item.row.lat = coord.lat; item.row.lng = coord.lng;
+        } else {
+          const zip = (item.row['Zip Code'] || item.row['ZIP Code'] || '').toString().trim();
+          const z5 = (zip.match(/\b(\d{5})\b/) || [,''])[1];
+          const centroid = z5 && hawaiiZipCoords[z5] ? hawaiiZipCoords[z5] : null;
+          if (centroid) { item.row.lat = centroid.lat; item.row.lng = centroid.lng; } else { item.row.lat = null; item.row.lng = null; }
+        }
+      }
     }
-  }
-
-  // Throttled geocoding for unresolved rows
-  for (const item of unresolved) {
-    const coord = await geocodeNominatim(item.q);
-    if (coord && Number.isFinite(coord.lat) && Number.isFinite(coord.lng)) {
-      item.row.lat = coord.lat;
-      item.row.lng = coord.lng;
-    } else {
-      // Last resort: ZIP centroid if not already set
-      const zip = (item.row['Zip Code'] || item.row['ZIP Code'] || '').toString().trim();
-      const z5 = (zip.match(/\b(\d{5})\b/) || [,''])[1];
-      const centroid = z5 && hawaiiZipCoords[z5] ? hawaiiZipCoords[z5] : null;
-      if (centroid) { item.row.lat = centroid.lat; item.row.lng = centroid.lng; }
-      else { item.row.lat = null; item.row.lng = null; }
-    }
-  }
-}
 
     // ---------------- Map & UI ----------------
     function initMap(){
@@ -592,17 +567,15 @@ function clearGeocodeCache() {
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{ attribution:'© OpenStreetMap contributors' }).addTo(map);
     }
 
-    // Build filters from the data (Grades now dynamic)
     function populateFilters(){
       const complexAreas = [...new Set(schoolsData.map(s => s['Complex Area']).filter(Boolean))].sort();
       const complexes    = [...new Set(schoolsData.map(s => s['Complex']).filter(Boolean))].sort();
-      const gradeStrings = [...new Set(
-        schoolsData.map(s => normGrades(s['Grades'])).filter(Boolean)
-      )].sort((a,b)=>a.localeCompare(b, undefined, {numeric:true}));
+      const gradeStrings = [...new Set(schoolsData.map(s => normGrades(s['Grades'])).filter(Boolean))]
+        .sort((a,b)=>a.localeCompare(b, undefined, {numeric:true}));
 
       populateSelect('complexArea', complexAreas);
       populateSelect('complex', complexes);
-      populateSelect('gradeLevel', gradeStrings); // <- exact strings from “Grades”
+      populateSelect('gradeLevel', gradeStrings);
     }
     function populateSelect(id, options){
       const el = document.getElementById(id);
@@ -618,6 +591,8 @@ function clearGeocodeCache() {
       const utilColor = util>90 ? '#e53e3e' : util>70 ? '#ed8936' : '#48bb78';
       const hasEOEL = (school['EOEL PreK'] && school['EOEL PreK'].toLowerCase().includes('202')) ||
                       ((parseInt(school['# EOEL Rooms'])||0) > 0);
+      const p = titleIPercent(school);
+      const tiText = `${isTitleI(school) ? 'YES' : 'NO'}${p!=null ? ` (${p.toFixed(1)}%)` : ''}`;
 
       return `
         <div style="min-width:220px;">
@@ -627,7 +602,7 @@ function clearGeocodeCache() {
           <div style="margin-bottom:.3rem;"><strong>Grades:</strong> ${school['Grades'] || 'N/A'}</div>
           <div style="margin-bottom:.3rem;"><strong>EOEL Program:</strong> ${hasEOEL ? '✅ Yes' : '❌ No'}</div>
           ${school['Total EOEL Capacity'] || school['EOEL Capacity'] ? `<div style="margin-bottom:.3rem;"><strong>EOEL Capacity:</strong> ${school['Total EOEL Capacity'] || school['EOEL Capacity']}</div>` : ''}
-          <div style="margin-bottom:.3rem;"><strong>Title I:</strong> ${school['Title I (24-25)'] || 'N/A'}</div>
+          <div style="margin-bottom:.3rem;"><strong>Title I:</strong> ${tiText}</div>
           <div style="margin-bottom:.3rem;"><strong>Site Utilization:</strong> <span style="color:${utilColor}; font-weight:bold;">${school['Site Utilization'] || 'N/A'}</span></div>
           <div><strong>Enrollment:</strong> ${school['Current Enrollment (SY 24-25)'] || 'N/A'} / ${school['Site Capacity'] || 'N/A'}</div>
         </div>`;
@@ -647,10 +622,12 @@ function clearGeocodeCache() {
       });
     }
 
-    function applyFilters(){
+    async function applyFilters(){
+      await drainGeocodeQueue(); // ensure all geocoding settled before filtering
+
       const complexArea = document.getElementById('complexArea').value;
       const complex = document.getElementById('complex').value;
-      const gradeLevel = document.getElementById('gradeLevel').value; // exact Grades string
+      const gradeLevel = document.getElementById('gradeLevel').value;
       const eoelStatus = document.getElementById('eoelStatus').value;
       const titleI = document.getElementById('titleI').value;
       const utilizationFilter = document.getElementById('utilizationFilter').value;
@@ -659,7 +636,13 @@ function clearGeocodeCache() {
         if (complexArea && s['Complex Area'] !== complexArea) return false;
         if (complex && s['Complex'] !== complex) return false;
         if (gradeLevel && normGrades(s['Grades']) !== gradeLevel) return false;
-        if (titleI && (s['Title I (24-25)']||"").toUpperCase() !== titleI.toUpperCase()) return false;
+
+        // Title I uses computed predicate
+        if (titleI) {
+          const t = isTitleI(s);
+          if (titleI.toUpperCase()==='YES' && !t) return false;
+          if (titleI.toUpperCase()==='NO'  &&  t) return false;
+        }
 
         if (eoelStatus){
           const hasEOEL = (s['EOEL PreK'] && s['EOEL PreK'].toLowerCase().includes('202')) || ((parseInt(s['# EOEL Rooms'])||0) > 0);
@@ -691,15 +674,18 @@ function clearGeocodeCache() {
       filteredData=[...schoolsData];
       displayMarkers(); updateStats();
     }
-// ---- helper: how many rows have no precise lat/lng?
-function countUnmappedRows() {
-  return schoolsData.filter(s => !(Number.isFinite(s.lat) && Number.isFinite(s.lng))).length;
-}
+
+    // ---- helper: how many rows have no precise lat/lng?
+    function countUnmappedRows() {
+      return schoolsData.filter(s => !(Number.isFinite(s.lat) && Number.isFinite(s.lng))).length;
+    }
 
     function updateStats(){
       const totalSchools = filteredData.length;
       const eoelCount = filteredData.filter(s => (s['EOEL PreK'] && s['EOEL PreK'].toLowerCase().includes('202')) || ((parseInt(s['# EOEL Rooms'])||0)>0)).length;
-      const titleICount = filteredData.filter(s => (s['Title I (24-25)']||"").toUpperCase()==='YES').length;
+
+      // Title I count based on computed predicate
+      const titleICount = filteredData.filter(s => isTitleI(s)).length;
 
       const totalEOELCapacity = filteredData.reduce((sum,s)=>{
         const a = parseInt(s["EOEL Capacity"]) || 0;
@@ -719,21 +705,21 @@ function countUnmappedRows() {
       document.getElementById('eoelCapacity').textContent = totalEOELCapacity;
       document.getElementById('avgUtilization').textContent = avgUtilization.toFixed(1) + '%';
       document.getElementById('titleICount').textContent = titleICount;
-   // --- append a hint under "📍 Data Source" if any rows are unmapped
-const unmapped = countUnmappedRows();
-const info = document.getElementById('dataSourceInfo');
-if (info) {
-  // remove previous note (if any), then add fresh
-  const old = info.querySelector('.unmapped-note');
-  if (old) old.remove();
-  if (unmapped > 0) {
-    const note = document.createElement('div');
-    note.className = 'unmapped-note';
-    note.innerHTML = `<small>📍 ${unmapped} record(s) could not be precisely mapped (name/address missing or ambiguous).</small>`;
-    info.appendChild(note);
-  }
-}
- }
+
+      // Append hint for unmapped rows
+      const unmapped = countUnmappedRows();
+      const info = document.getElementById('dataSourceInfo');
+      if (info) {
+        const old = info.querySelector('.unmapped-note');
+        if (old) old.remove();
+        if (unmapped > 0) {
+          const note = document.createElement('div');
+          note.className = 'unmapped-note';
+          note.innerHTML = `<small>📍 ${unmapped} record(s) could not be precisely mapped (name/address missing or ambiguous).</small>`;
+          info.appendChild(note);
+        }
+      }
+    }
 
     // ---------------- Executive tools ----------------
     function generateExecutiveSummary(){
@@ -757,7 +743,7 @@ if (info) {
 
       const totalSchools = filteredData.length;
       const eoelCount = filteredData.filter(s => (s['EOEL PreK'] && s['EOEL PreK'].toLowerCase().includes('202')) || ((parseInt(s['# EOEL Rooms'])||0)>0)).length;
-      const titleICount = filteredData.filter(s => (s['Title I (24-25)']||"").toUpperCase()==='YES').length;
+      const titleICount = filteredData.filter(s => isTitleI(s)).length;
       const totalEOELCapacity = filteredData.reduce((sum,s)=>{
         const a=parseInt(s["EOEL Capacity"])||0; const b=parseInt(s["Total EOEL Capacity"])||0;
         return sum + (b>0?b:a);
@@ -773,7 +759,7 @@ if (info) {
           areaBreakdown[area].eoel++;
           areaBreakdown[area].capacity += (parseInt(s['Total EOEL Capacity'])||parseInt(s['EOEL Capacity'])||0);
         }
-        if ((s['Title I (24-25)']||"").toUpperCase()==='YES') areaBreakdown[area].titleI++;
+        if (isTitleI(s)) areaBreakdown[area].titleI++;
       });
 
       content.innerHTML = `
@@ -853,9 +839,7 @@ if (info) {
       const modal = document.getElementById('customReportModal');
       const fieldSelector = document.getElementById('fieldSelector');
 
-      const allKeys = Array.from(new Set(
-        filteredData.flatMap(Object.keys)
-      )).filter(k => !['lat','lng','__level'].includes(k));
+      const allKeys = Array.from(new Set(filteredData.flatMap(Object.keys))).filter(k => !['lat','lng','__level'].includes(k));
 
       const preferred = new Set([
         'Name of School','School Code','Complex Area','Complex','Grades',
@@ -979,6 +963,8 @@ EOEL Team`;
 
       filteredData.forEach(s=>{
         const hasEOEL = (s['EOEL PreK'] && s['EOEL PreK'].toLowerCase().includes('202')) || ((parseInt(s['# EOEL Rooms'])||0)>0);
+        const p = titleIPercent(s);
+        const tiText = `${isTitleI(s) ? 'YES' : 'NO'}${p!=null ? ` (${p.toFixed(1)}%)` : ''}`;
         const tr=document.createElement('tr');
         tr.innerHTML = `
           <td>${s['Name of School']||''}</td>
@@ -987,7 +973,7 @@ EOEL Team`;
           <td>${s['Grades']||''}</td>
           <td>${hasEOEL ? '✅ Yes' : '❌ No'}</td>
           <td>${s['Total EOEL Capacity'] || s['EOEL Capacity'] || 'N/A'}</td>
-          <td>${s['Title I (24-25)'] || 'N/A'}</td>
+          <td>${tiText}</td>
           <td>${s['Site Utilization'] || 'N/A'}</td>
           <td>${s['Current Enrollment (SY 24-25)'] || 'N/A'} / ${s['Site Capacity'] || 'N/A'}</td>`;
         tableBody.appendChild(tr);
@@ -1059,8 +1045,9 @@ EOEL Team`;
       try{
         loadSampleData();
         initMap();
-        populateFilters();      // includes dynamic Grades options
-        await geocodeSchools(); // safer geocoding
+        populateFilters();
+        await geocodeSchools();
+        await drainGeocodeQueue(); // ensure queued lookups done before first paint
         displayMarkers();
         updateStats();
         document.getElementById('loading').style.display='none';
