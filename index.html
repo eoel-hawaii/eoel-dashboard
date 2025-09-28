@@ -613,18 +613,49 @@ function createPopupContent(school){
 }
 
 function displayMarkers(){
-  markers.forEach(m=>map.removeLayer(m)); markers=[];
-  filteredData.forEach(s=>{
-    if (Number.isFinite(s.lat) && Number.isFinite(s.lng) && isInHawaii(s.lat, s.lng)){
+  // remove old markers
+  markers.forEach(m=>map.removeLayer(m)); 
+  markers = [];
+
+  // group by exact lat/lng so we can spread overlapping points
+  const groups = new Map(); // key = "lat,lng" -> array of rows
+  for (const s of filteredData) {
+    if (Number.isFinite(s.lat) && Number.isFinite(s.lng) && isInHawaii(s.lat, s.lng)) {
+      const key = `${s.lat.toFixed(6)},${s.lng.toFixed(6)}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(s);
+    }
+  }
+
+  // small offset helper (spiral-ish)
+  function offsetAt(idx, total){
+    if (total === 1) return { dLat: 0, dLng: 0 };
+    const radius = 0.0025 * Math.ceil(idx/6); // ~250m rings
+    const angle  = (idx * 60) * (Math.PI/180); // 60° steps
+    // convert "radius" degrees roughly (good enough at Hawaii latitudes)
+    return { dLat: radius * Math.sin(angle), dLng: radius * Math.cos(angle) };
+  }
+
+  // draw groups with slight offsets so each point is clickable/visible
+  for (const [_, rows] of groups) {
+    rows.forEach((s, i) => {
+      const { dLat, dLng } = offsetAt(i, rows.length);
+      const lat = s.lat + dLat;
+      const lng = s.lng + dLng;
+
       const hasEOEL = (s['EOEL PreK'] && s['EOEL PreK'].toLowerCase().includes('202')) ||
                       ((parseInt(s['# EOEL Rooms'])||0) > 0);
       const color = hasEOEL ? '#48bb78' : '#e53e3e';
-      const marker = L.circleMarker([s.lat, s.lng], { radius:6, fillColor:color, color:'#fff', weight:2, opacity:1, fillOpacity:.8 })
-        .bindPopup(createPopupContent(s)).addTo(map);
+
+      const marker = L.circleMarker([lat, lng], {
+        radius: 6, fillColor: color, color:'#fff', weight:2, opacity:1, fillOpacity:.85
+      }).bindPopup(createPopupContent(s)).addTo(map);
+
       markers.push(marker);
-    }
-  });
+    });
+  }
 }
+
 
 function applyFilters(){
   const complexArea = document.getElementById('complexArea').value;
