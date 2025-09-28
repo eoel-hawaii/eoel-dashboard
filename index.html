@@ -78,11 +78,11 @@
           </select>
         </div>
         <div class="filter-group">
-          <label for="titleI">Title I Status (>=47.2%):</label>
+          <label for="titleI">Title I Status:</label>
           <select id="titleI">
             <option value="">All</option>
-            <option value="YES">Eligible</option>
-            <option value="NO">Not Eligible</option>
+            <option value="YES">Title I</option>
+            <option value="NO">Non-Title I</option>
           </select>
         </div>
         <div class="filter-group">
@@ -104,12 +104,12 @@
         <div class="stat-item"><span class="stat-label">EOEL Programs:</span><span class="stat-value" id="eoelCount">0</span></div>
         <div class="stat-item"><span class="stat-label">EOEL Capacity:</span><span class="stat-value" id="eoelCapacity">0</span></div>
         <div class="stat-item"><span class="stat-label">Avg Utilization:</span><span class="stat-value" id="avgUtilization">0%</span></div>
-        <div class="stat-item"><span class="stat-label">Title I Eligible:</span><span class="stat-value" id="titleICount">0</span></div>
+        <div class="stat-item"><span class="stat-label">Title I Schools:</span><span class="stat-value" id="titleICount">0</span></div>
       </div>
 
       <div class="export-section">
         <h3>🎯 Executive Tools</h3>
-        <button class="btn" id="loadDataBtn" onclick="loadLiveData()">🔄 Load Live EOEL Data</button>
+        <button class="btn" onclick="loadLiveData()" id="loadDataBtn">🔄 Load Live EOEL Data</button>
         <button class="btn" onclick="showDataTable()">View Data Table</button>
         <button class="btn" onclick="generateExecutiveSummary()">📊 Executive Summary</button>
         <button class="btn btn-secondary" onclick="showCustomReportBuilder()">🔧 Build Custom Report</button>
@@ -219,731 +219,711 @@
     </div>
   </div>
 
-  <!-- PapaParse -->
+  <!-- PapaParse (robust CSV parser) -->
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
   <!-- Leaflet JS -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 
   <script>
-/* ========= Geocoding helpers ========= */
-function buildGeocodeQuery(row) {
-  const zip = (row['Zip Code'] || row['ZIP Code'] || '').toString().trim();
-  const zip5 = (zip.match(/\b(\d{5})\b/) || [,''])[1] || '';
-  const partsAddr = [row['Street Address'], row['City'], 'HI', zip5].filter(Boolean);
-  if (partsAddr.length >= 2) return partsAddr.join(', ');
-  const partsByNameCity = [row['Name of School'], row['City'], 'HI'].filter(Boolean);
-  if (partsByNameCity.length >= 2) return partsByNameCity.join(', ');
-  const byNameHI = [row['Name of School'], 'Hawaii'].filter(Boolean).join(', ');
-  if (byNameHI) return byNameHI;
-  return zip5 || null;
-}
+    // ---------- Name/Address Geocoding Helpers (no sheet changes required) ----------
+    function buildGeocodeQuery(row) {
+      const zip = (row['Zip Code'] || row['ZIP Code'] || '').toString().trim();
+      const zip5 = (zip.match(/\b(\d{5})\b/) || [,''])[1] || '';
+      const partsAddr = [
+        row['Street Address'],
+        row['City'],
+        'HI',
+        zip5
+      ].filter(Boolean);
+      if (partsAddr.length >= 2) return partsAddr.join(', ');
 
-const MANUAL_COORD_OVERRIDES = {};
+      const partsByNameCity = [ row['Name of School'], row['City'], 'HI' ].filter(Boolean);
+      if (partsByNameCity.length >= 2) return partsByNameCity.join(', ');
 
-function getGeoCache(key) {
-  try { const raw = localStorage.getItem('geo:'+key); return raw ? JSON.parse(raw) : null; } catch { return null; }
-}
-function setGeoCache(key, coord) {
-  try { localStorage.setItem('geo:'+key, JSON.stringify(coord)); } catch {}
-}
+      const byNameHI = [row['Name of School'], 'Hawaii'].filter(Boolean).join(', ');
+      if (byNameHI) return byNameHI;
 
-const NOMINATIM_BASE = 'https://nominatim.openstreetmap.org/search';
-const USER_EMAIL = 'you@example.com';
-let geocodeQueue = Promise.resolve();
+      return zip5 || null;
+    }
 
-async function geocodeNominatim(q) {
-  const cached = getGeoCache(q);
-  if (cached) return cached;
-  geocodeQueue = geocodeQueue.then(() => new Promise(async (resolve) => {
-    try {
-      await new Promise(r => setTimeout(r, 1100));
-      const url = `${NOMINATIM_BASE}?format=jsonv2&q=${encodeURIComponent(q)}&addressdetails=0&limit=1&email=${encodeURIComponent(USER_EMAIL)}`;
-      const res = await fetch(url, { headers: { 'Accept': 'application/json' }});
-      if (!res.ok) throw new Error('Geocode HTTP ' + res.status);
-      const results = await res.json();
-      if (Array.isArray(results) && results.length) {
-        const { lat, lon } = results[0];
-        const coord = { lat: parseFloat(lat), lng: parseFloat(lon) };
-        setGeoCache(q, coord);
-        resolve(coord);
-      } else {
-        resolve(null);
+    const MANUAL_COORD_OVERRIDES = {
+      // "Exact School Name As In Sheet": { lat: 21.3069, lng: -157.8583 },
+    };
+
+    function getGeoCache(key) {
+      try { const raw = localStorage.getItem('geo:'+key); return raw ? JSON.parse(raw) : null; } catch { return null; }
+    }
+    function setGeoCache(key, coord) {
+      try { localStorage.setItem('geo:'+key, JSON.stringify(coord)); } catch {}
+    }
+
+    const NOMINATIM_BASE = 'https://nominatim.openstreetmap.org/search';
+    const USER_EMAIL = 'you@example.com';
+    let geocodeQueue = Promise.resolve();
+
+    async function geocodeNominatim(q) {
+      const cached = getGeoCache(q);
+      if (cached) return cached;
+
+      geocodeQueue = geocodeQueue.then(() => new Promise(async (resolve) => {
+        try {
+          await new Promise(r => setTimeout(r, 1100));
+          const url = `${NOMINATIM_BASE}?format=jsonv2&q=${encodeURIComponent(q)}&addressdetails=0&limit=1&email=${encodeURIComponent(USER_EMAIL)}`;
+          const res = await fetch(url, { headers: { 'Accept': 'application/json' }});
+          if (!res.ok) throw new Error(`Geocode HTTP ${res.status}`);
+          const results = await res.json();
+          if (Array.isArray(results) && results.length) {
+            const { lat, lon } = results[0];
+            const coord = { lat: parseFloat(lat), lng: parseFloat(lon) };
+            setGeoCache(q, coord);
+            resolve(coord);
+          } else {
+            resolve(null);
+          }
+        } catch {
+          resolve(null);
+        }
+      }));
+      return geocodeQueue;
+    }
+
+    // ---------------- Simple bounds check ----------------
+    function isInHawaii(lat, lng){
+      return Number.isFinite(lat) && Number.isFinite(lng)
+        && lat >= 18.8 && lat <= 22.4
+        && lng >= -160.8 && lng <= -154.5;
+    }
+
+    // ---------------- Globals ----------------
+    let map;
+    let schoolsData = [];
+    let filteredData = [];
+    let markers = [];
+
+    // ---------------- Google Sheets config ----------------
+    const SHEET_ID  = "1l8UAyei-dawrCo0RX6zhyOTm2283R0gB9MVXFjbRy_Y";
+    const SHEET_GID = "0";
+    const SHEET_CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${SHEET_GID}`;
+
+    // ---------------- Helpers ----------------
+    function normGrades(v) {
+      if (v == null) return "";
+      return String(v)
+        .replace(/\u2013|\u2014/g, "-")
+        .replace(/\s+/g, " ")
+        .trim();
+    }
+
+    function normalizeHeader(h) {
+      return (h || "")
+        .replace(/\uFEFF/g, "")
+        .replace(/"/g, "")
+        .replace(/\s+/g, " ")
+        .replace(/\s*\/\s*/g, " / ")
+        .trim()
+        .toLowerCase();
+    }
+
+    const HEADER_MAP = new Map([
+      ["name of school","Name of School"],
+      ["school code","School Code"],
+      ["grades","Grades"],
+      ["renovations / new builds / modular & notes","Renovations/Builds/Modular Notes"],
+      ["cte","CTE"],
+      ["cte potential partnerships","CTE Potential Partnerships"],
+      ["complex area","Complex Area"],
+      ["complex","Complex"],
+      ["cas (first.last@k12.hi.us)","CAS (first.last@k12.hi.us)"],
+      ["principal","Principal"],
+      ["principal email","Principal Email"],
+      ["zip code","Zip Code"],
+      ["house","House"],
+      ["representative","Representative"],
+      ["senate","Senate"],
+      ["senator","Senator"],
+      ["military impacted","Military Impacted"],
+      ["% of ges to the school 2024","% of GEs to the School 2024"],
+      ["access","Access"],
+      ["opport.","Opport."],
+      ["top 13 lowest access & opportunity","TOP 13 LOWEST Access & Opportunity"],
+      ["% pacific islander *no hawaiian, no chamorro","% Pacific Islander (No Hawaiian, No Chamorro)"],
+      ["mv1 unstable housing (may 2024)","MV1 Unstable Housing (May 2024)"],
+      ["title i (24-25)","Title I (24-25)"],
+      ["english language learners","English Language Learners"],
+      ["site capacity","Site Capacity"],
+      ["site utilization","Site Utilization"],
+      ["current enrollment (sy 24-25)","Current Enrollment (SY 24-25)"],
+      ["current sped prek enrollment (ecse) (sy 24-25)","Current SPED PreK Enrollment (SY 24-25)"],
+      ["current kindergarten enrollment (sy 24-25)","Current Kindergarten Enrollment (SY 24-25)"],
+      ["eoel funded fcil on campus","EOEL Funded FCIL on Campus"],
+      ["eoel prek","EOEL PreK"],
+      ["# eoel rooms","# EOEL Rooms"],
+      ["eoel prek room #","EOEL PreK Room #"],
+      ["total eoel capacity","Total EOEL Capacity"],
+      ["federal early ch. special ed.","Federal Early Ch. Special Ed."],
+      ["federal title i prek","Federal Title I PreK"],
+      ["federal migrant prek","Federal Migrant PreK"],
+      ["early head start (0-3)","Early Head Start (0-3)"],
+      ["ehs seats","EHS Seats"],
+      ["head start (ages 3-5)","Head Start (Ages 3-5)"],
+      ["hs seats","HS Seats"],
+      ["early learning / preplus contract","Early Learning / PrePlus Contract"],
+      ["early learning/ preplus seats","Early Learning / PrePlus Seats"],
+      ["hawaiian language (prek)","Hawaiian Language (PreK)"],
+      ["doe kaiapuni (k-12)","DOE Kaiapuni (K-12)"],
+      ["ks","KS"],
+      ["state library on campus","State Library on Campus"],
+      ["notes","NOTES"],
+    ]);
+
+    const PERCENT_FIELDS = new Set([
+      "% of GEs to the School 2024",
+      "Site Utilization",
+      "% Pacific Islander (No Hawaiian, No Chamorro)",
+      "English Language Learners"
+    ]);
+
+    const INTEGER_FIELDS = new Set([
+      "EOEL Capacity","Total EOEL Capacity","Site Capacity",
+      "Current Enrollment (SY 24-25)","Current SPED PreK Enrollment (SY 24-25)",
+      "Current Kindergarten Enrollment (SY 24-25)",
+      "# EOEL Rooms","EOEL PreK Room #",
+      "EHS Seats","HS Seats","Early Learning / PrePlus Seats"
+    ]);
+
+    function toInt(x){ const n=parseInt(String(x||"").replace(/,/g,""),10); return Number.isFinite(n)?n:""; }
+    function toPctString(x){
+      if (x==null||x==="") return "";
+      const s=String(x).trim();
+      const n=parseFloat(s.replace(/,/g,"").replace(/%/g,""));
+      return Number.isFinite(n) ? `${n}%` : "";
+    }
+
+    function detectHeaderRow(rows){
+      let best={idx:0,score:-1};
+      for(let i=0;i<Math.min(rows.length,15);i++){
+        const cells=rows[i].map(c=>String(c||"").trim());
+        const nonEmpty=cells.filter(c=>c).length;
+        const hits=cells.map(normalizeHeader).reduce((a,h)=>a+(HEADER_MAP.has(h)?1:0),0);
+        const score=hits*3 + nonEmpty*2;
+        if(score>best.score) best={idx:i,score};
       }
-    } catch {
-      resolve(null);
-    }
-  }));
-  return geocodeQueue;
-}
-
-function isInHawaii(lat, lng) {
-  return lat >= 18.8 && lat <= 22.4 && lng >= -160.8 && lng <= -154.6;
-}
-
-/* ========= Globals ========= */
-let map;
-let schoolsData = [];
-let filteredData = [];
-let markers = [];
-
-/* ========= Google Sheets ========= */
-const SHEET_ID  = "1l8UAyei-dawrCo0RX6zhyOTm2283R0gB9MVXFjbRy_Y";
-const SHEET_GID = "0";
-const SHEET_CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${SHEET_GID}`;
-
-/* ========= Helpers ========= */
-function normGrades(v) {
-  if (v == null) return "";
-  return String(v).replace(/\u2013|\u2014/g, "-").replace(/\s+/g, " ").trim();
-}
-function normalizeHeader(h) {
-  return (h || "")
-    .replace(/\uFEFF/g, "")
-    .replace(/"/g, "")
-    .replace(/\s+/g, " ")
-    .replace(/\s*\/\s*/g, " / ")
-    .trim()
-    .toLowerCase();
-}
-
-const HEADER_MAP = new Map([
-  ["name of school","Name of School"],
-  ["school code","School Code"],
-  ["grades","Grades"],
-  ["renovations / new builds / modular & notes","Renovations/Builds/Modular Notes"],
-  ["cte","CTE"],
-  ["cte potential partnerships","CTE Potential Partnerships"],
-  ["complex area","Complex Area"],
-  ["complex","Complex"],
-  ["cas (first.last@k12.hi.us)","CAS (first.last@k12.hi.us)"],
-  ["principal","Principal"],
-  ["principal email","Principal Email"],
-  ["zip code","Zip Code"],
-  ["house","House"],
-  ["representative","Representative"],
-  ["senate","Senate"],
-  ["senator","Senator"],
-  ["military impacted","Military Impacted"],
-  ["% of ges to the school 2024","% of GEs to the School 2024"],
-  ["access","Access"],
-  ["opport.","Opport."],
-  ["top 13 lowest access & opportunity","TOP 13 LOWEST Access & Opportunity"],
-  ["% pacific islander *no hawaiian, no chamorro","% Pacific Islander (No Hawaiian, No Chamorro)"],
-  ["mv1 unstable housing (may 2024)","MV1 Unstable Housing (May 2024)"],
-  ["title i (24-25)","Title I (24-25)"],
-  ["english language learners","English Language Learners"],
-  ["site capacity","Site Capacity"],
-  ["site utilization","Site Utilization"],
-  ["current enrollment (sy 24-25)","Current Enrollment (SY 24-25)"],
-  ["current sped prek enrollment (ecse) (sy 24-25)","Current SPED PreK Enrollment (SY 24-25)"],
-  ["current kindergarten enrollment (sy 24-25)","Current Kindergarten Enrollment (SY 24-25)"],
-  ["eoel funded fcil on campus","EOEL Funded FCIL on Campus"],
-  ["eoel prek","EOEL PreK"],
-  ["# eoel rooms","# EOEL Rooms"],
-  ["eoel prek room #","EOEL PreK Room #"],
-  ["total eoel capacity","Total EOEL Capacity"],
-  ["federal early ch. special ed.","Federal Early Ch. Special Ed."],
-  ["federal title i prek","Federal Title I PreK"],
-  ["federal migrant prek","Federal Migrant PreK"],
-  ["early head start (0-3)","Early Head Start (0-3)"],
-  ["ehs seats","EHS Seats"],
-  ["head start (ages 3-5)","Head Start (Ages 3-5)"],
-  ["hs seats","HS Seats"],
-  ["early learning / preplus contract","Early Learning / PrePlus Contract"],
-  ["early learning/ preplus seats","Early Learning / PrePlus Seats"],
-  ["hawaiian language (prek)","Hawaiian Language (PreK)"],
-  ["doe kaiapuni (k-12)","DOE Kaiapuni (K-12)"],
-  ["ks","KS"],
-  ["state library on campus","State Library on Campus"],
-  ["notes","NOTES"],
-]);
-
-const PERCENT_FIELDS = new Set([
-  "% of GEs to the School 2024",
-  "Site Utilization",
-  "% Pacific Islander (No Hawaiian, No Chamorro)",
-  "English Language Learners",
-  "Title I (24-25)"
-]);
-
-const INTEGER_FIELDS = new Set([
-  "EOEL Capacity","Total EOEL Capacity","Site Capacity",
-  "Current Enrollment (SY 24-25)","Current SPED PreK Enrollment (SY 24-25)",
-  "Current Kindergarten Enrollment (SY 24-25)",
-  "# EOEL Rooms","EOEL PreK Room #",
-  "EHS Seats","HS Seats","Early Learning / PrePlus Seats"
-]);
-
-function toInt(x){ const n=parseInt(String(x||"").replace(/,/g,""),10); return Number.isFinite(n)?n:""; }
-function toPctString(x){
-  if (x==null||x==="") return "";
-  const s=String(x).trim();
-  const n=parseFloat(s.replace(/,/g,"").replace(/%/g,""));
-  return Number.isFinite(n) ? `${n}%` : "";
-}
-
-// robust school code
-function normalizeSchoolCode(v) {
-  const s = String(v ?? "")
-    .replace(/\uFEFF|\u200B|\u00A0/g, "")
-    .replace(/^'+/, "")
-    .trim()
-    .normalize("NFKD");
-  const digits = (s.match(/\d+/) || [""])[0];
-  return digits || s;
-}
-
-function detectHeaderRow(rows){
-  let best={idx:0,score:-1};
-  for(let i=0;i<Math.min(rows.length,15);i++){
-    const cells=rows[i].map(c=>String(c||"").trim());
-    const nonEmpty=cells.filter(c=>c).length;
-    const hits=cells.map(normalizeHeader).reduce((a,h)=>a+(HEADER_MAP.has(h)?1:0),0);
-    const score=hits*3 + nonEmpty*2;
-    if(score>best.score) best={idx:i,score};
-  }
-  return best.idx;
-}
-
-function normalizeRow(rawRow, rawHeaders){
-  const out={};
-  rawHeaders.forEach((h,i)=>{
-    const keyNorm=normalizeHeader(h);
-    if(!keyNorm) return;
-    const canon=HEADER_MAP.get(keyNorm) || h;
-    if(!canon) return;
-    let val = rawRow[i]!=null ? String(rawRow[i]).trim() : "";
-
-    if (canon === "School Code") {
-      val = normalizeSchoolCode(val);
-    } else if (PERCENT_FIELDS.has(canon)) {
-      val = toPctString(val);
-    } else if (INTEGER_FIELDS.has(canon)) {
-      val = toInt(val);
+      return best.idx;
     }
 
-    out[canon]=val;
-  });
-  return out;
-}
+    function normalizeRow(rawRow, rawHeaders){
+      const out={};
+      rawHeaders.forEach((h,i)=>{
+        const keyNorm=normalizeHeader(h);
+        if(!keyNorm) return;
+        const canon=HEADER_MAP.get(keyNorm) || h;
+        if(!canon) return;
+        let val = rawRow[i]!=null ? String(rawRow[i]).trim() : "";
 
-// Title I eligibility (>= 47.2%)
-function titleIPercent(row){
-  const s = String(row["Title I (24-25)"] || "").replace('%','').trim();
-  const n = parseFloat(s);
-  return Number.isFinite(n) ? n : null;
-}
-function isTitleI(row){
-  const p = titleIPercent(row);
-  return p != null && p >= 47.2;
-}
+        if (PERCENT_FIELDS.has(canon)) val = toPctString(val);
+        else if (INTEGER_FIELDS.has(canon)) val = toInt(val);
 
-/* ========= Sample data ========= */
-function loadSampleData(){
-  schoolsData = [
-    {"Name of School":"Wailuku Elementary School","School Code":"425","Complex Area":"Baldwin-Kekaulike-Kūlanihākoʻi-Maui","Complex":"Baldwin","Grades":"K-5","EOEL PreK":"2023 2024","EOEL Capacity":"40","# EOEL Rooms":"2","Title I (24-25)":"40.00%","Site Capacity":"789","Site Utilization":"67.81%","Current Enrollment (SY 24-25)":"535","English Language Learners":"18.00%","Zip Code":"96793","Principal":"Dr. Nikan Arapoff","Principal Email":"Nikan.Arapoff@k12.hi.us"},
-    {"Name of School":"Kahului Elementary School","School Code":"405","Complex Area":"Baldwin-Kekaulike-Kūlanihākoʻi-Maui","Complex":"Maui","Grades":"K-5","EOEL PreK":"","EOEL Capacity":"","# EOEL Rooms":"0","Title I (24-25)":"30.00%","Site Capacity":"825","Site Utilization":"94.30%","Current Enrollment (SY 24-25)":"778","English Language Learners":"18.00%","Zip Code":"96732","Principal":"Suzanne Forbes","Principal Email":"Suzanne.Forbes@k12.hi.us"},
-    {"Name of School":"Barbers Point Elementary School","School Code":"251","Complex Area":"Campbell-Kapolei","Complex":"Kapolei","Grades":"K-5","EOEL PreK":"2025 (1)","EOEL Capacity":"20","# EOEL Rooms":"1","Title I (24-25)":"20.00%","Site Capacity":"584","Site Utilization":"88.01%","Current Enrollment (SY 24-25)":"514","English Language Learners":"27.00%","Zip Code":"96707","Principal":"Aaron Okumura","Principal Email":"aaron.okumura@k12.hi.us"},
-    {"Name of School":"Hauʻula Elementary School","School Code":"303","Complex Area":"Castle-Kahuku","Complex":"Kahuku","Grades":"K-6","EOEL PreK":"2025 (2)","EOEL Capacity":"40","# EOEL Rooms":"2","Title I (24-25)":"55.00%","Site Capacity":"330","Site Utilization":"113.64%","Current Enrollment (SY 24-25)":"375","English Language Learners":"16.00%","Zip Code":"96717","Principal":"Uilani Kaitoku","Principal Email":"Uilani.Kaitoku@k12.hi.us"},
-    {"Name of School":"Hilo High School","School Code":"355","Complex Area":"Hilo-Waiākea","Complex":"Hilo","Grades":"9-12","EOEL PreK":"","EOEL Capacity":"","# EOEL Rooms":"0","Title I (24-25)":"28.00%","Site Capacity":"1070","Site Utilization":"109.35%","Current Enrollment (SY 24-25)":"1170","English Language Learners":"25.00%","Zip Code":"96720","Principal":"Jasmine Urasaki","Principal Email":"Jasmine.Urasaki@k12.hi.us"},
-    {"Name of School":"Lāna'i High & Elementary School","School Code":"415","Complex Area":"Hāna-Lahainaluna-Lānaʻi-Molokai","Complex":"Lānaʻi","Grades":"K-12","EOEL PreK":"2014 - E 2024 - H","EOEL Capacity":"37","# EOEL Rooms":"2","Title I (24-25)":"49.00%","Site Capacity":"624","Site Utilization":"91.67%","Current Enrollment (SY 24-25)":"572","English Language Learners":"17.00%","Zip Code":"96763","Principal":"Douglas Boyer","Principal Email":"Douglas.Boyer@k12.hi.us"}
-  ];
-  filteredData = [...schoolsData];
-}
-
-/* ========= Live data loader ========= */
-async function loadLiveData(){
-  const btn = document.getElementById("loadDataBtn");
-  const info = document.getElementById("dataSourceInfo");
-  btn.textContent = "⏳ Loading…";
-  btn.disabled = true; info.textContent = "Connecting to Google Sheets…";
-
-  try{
-    const csvText = await fetch(SHEET_CSV_URL,{cache:"no-store"}).then(r=>{
-      if(!r.ok) throw new Error('HTTP ' + r.status);
-      return r.text();
-    });
-
-    const parsed = Papa.parse(csvText, { skipEmptyLines:true });
-    if (parsed.errors?.length) console.warn("Papa errors:", parsed.errors.slice(0,3));
-
-    const rows = parsed.data;
-    if (!rows || rows.length < 2) throw new Error("No data found in CSV.");
-
-    const headerIdx = detectHeaderRow(rows);
-    const rawHeaders = rows[headerIdx];
-    const dataRows = rows.slice(headerIdx+1);
-
-    const cleaned = [];
-    for (const r of dataRows){
-      const row = normalizeRow(r, rawHeaders);
-      const schoolName = row["Name of School"] || "";
-      if (!schoolName.trim()) continue;
-      if (/^total/i.test(schoolName)) continue;
-      cleaned.push(row);
+        out[canon]=val;
+      });
+      return out;
     }
 
-    schoolsData = cleaned;
-    filteredData = [...schoolsData];
-
-    console.log("[Ingest] rows parsed:", dataRows.length, "kept:", cleaned.length);
-
-    populateFilters();
-    await geocodeSchools();
-    displayMarkers();
-    updateStats();
-
-    btn.textContent = "✅ Live Data Loaded";
-    btn.style.background = "linear-gradient(135deg,#48bb78 0%,#38a169 100%)";
-    info.innerHTML = "<strong>✅ Live Google Sheets Data</strong><br>Loaded " + schoolsData.length + " schools<br><small>Last updated: " + new Date().toLocaleString() + "</small>";
-    document.getElementById("loading").style.display = "none";
-  }catch(err){
-    console.error("Load failed:", err);
-    btn.textContent = "❌ Load Failed — Try Again";
-    btn.disabled = false;
-    info.innerHTML = "<strong>❌ Google Sheets Connection Failed</strong><br>Using sample data.<br><small>Error: " + err.message + "</small>";
-  }
-}
-
-/* ========= ZIP centroids ========= */
-const hawaiiZipCoords = {
-  "96701":{lat:21.3845,lng:-157.9284},"96706":{lat:21.3407,lng:-158.0515},"96707":{lat:21.3363,lng:-158.0711},
-  "96712":{lat:21.6389,lng:-158.0572},"96717":{lat:21.6877,lng:-157.9652},"96730":{lat:21.5647,lng:-157.8378},
-  "96731":{lat:21.6772,lng:-158.1058},"96734":{lat:21.4022,lng:-157.7394},"96744":{lat:21.4389,lng:-157.8583},
-  "96762":{lat:21.6447,lng:-158.0422},"96789":{lat:21.4511,lng:-158.0156},"96792":{lat:21.4389,lng:-158.1867},
-  "96815":{lat:21.2777,lng:-157.8262},"96816":{lat:21.2777,lng:-157.7408},"96817":{lat:21.3319,lng:-157.8583},
-  "96819":{lat:21.3319,lng:-157.8583},"96821":{lat:21.2777,lng:-157.7408},"96825":{lat:21.2777,lng:-157.7408},
-  "96703":{lat:21.9311,lng:-159.3617},"96705":{lat:22.0964,lng:-159.3286},"96714":{lat:22.0858,lng:-159.5019},
-  "96715":{lat:22.2011,lng:-159.4958},"96716":{lat:21.9311,lng:-159.3617},"96741":{lat:21.8847,lng:-159.3717},
-  "96746":{lat:21.9722,lng:-159.6506},"96751":{lat:21.9311,lng:-159.3617},"96754":{lat:21.9408,lng:-159.4075},
-  "96756":{lat:21.8847,lng:-159.6700},"96765":{lat:21.8847,lng:-159.6700},"96766":{lat:21.8847,lng:-159.6700},
-  "96769":{lat:21.9197,lng:-159.5036},"96796":{lat:21.9197,lng:-159.5036},"96720":{lat:19.7297,lng:-155.0890},
-  "96713":{lat:20.7886,lng:-156.0512},"96743":{lat:19.6405,lng:-155.9969},"96750":{lat:19.7297,lng:-155.0890},
-  "96740":{lat:19.7297,lng:-155.0890},"96749":{lat:19.5429,lng:-155.6659},"96755":{lat:19.5429,lng:-155.6659},
-  "96760":{lat:19.8968,lng:-155.5828},"96771":{lat:19.8968,lng:-155.5828},"96772":{lat:19.4925,lng:-155.8347},
-  "96773":{lat:19.4925,lng:-155.8347},"96774":{lat:19.5429,lng:-155.6659},"96777":{lat:19.4342,lng:-155.2711},
-  "96778":{lat:19.5429,lng:-155.6659},"96780":{lat:19.5429,lng:-155.6659},"96781":{lat:19.5429,lng:-155.6659},
-  "96783":{lat:20.0208,lng:-155.6686},"96785":{lat:19.7297,lng:-155.0890},
-  "96732":{lat:20.8893,lng:-156.4729},"96753":{lat:20.7539,lng:-156.4522},"96761":{lat:20.8783,lng:-156.6825},
-  "96768":{lat:20.8483,lng:-156.3256},"96779":{lat:20.9025,lng:-156.3647},"96790":{lat:20.7539,lng:-156.3256},
-  "96793":{lat:20.8893,lng:-156.5047},"96708":{lat:20.9222,lng:-156.3033},"96784":{lat:20.7539,lng:-156.4522},
-  "96786":{lat:20.7539,lng:-156.4522},"96787":{lat:20.9025,lng:-156.3647},"96788":{lat:20.9025,lng:-156.3647},
-  "96748":{lat:21.0985,lng:-157.0594},"96729":{lat:21.1444,lng:-157.0269},"96763":{lat:20.8283,lng:-156.9197},
-  "96770":{lat:21.1053,lng:-157.2051}
-};
-
-/* ========= Geocode schools ========= */
-async function geocodeSchools() {
-  const unresolved = [];
-
-  for (const s of schoolsData) {
-    const ov = MANUAL_COORD_OVERRIDES[s['Name of School']];
-    if (ov && Number.isFinite(ov.lat) && Number.isFinite(ov.lng)) { s.lat = ov.lat; s.lng = ov.lng; continue; }
-
-    const lat = parseFloat(s['Latitude'] ?? s['Lat']);
-    const lng = parseFloat(s['Longitude'] ?? s['Lng'] ?? s['Long']);
-    if (Number.isFinite(lat) && Number.isFinite(lng)) { s.lat = lat; s.lng = lng; continue; }
-
-    const zip = (s['Zip Code'] || s['ZIP Code'] || '').toString().trim();
-    const z5 = (zip.match(/\b(\d{5})\b/) || [,''])[1];
-    const centroid = z5 && hawaiiZipCoords[z5] ? hawaiiZipCoords[z5] : null;
-    if (centroid) { s.lat = centroid.lat; s.lng = centroid.lng; } else { s.lat = null; s.lng = null; }
-
-    const q = buildGeocodeQuery(s);
-    if (q) unresolved.push({ row: s, q });
-  }
-
-  for (const item of unresolved) {
-    const coord = await geocodeNominatim(item.q);
-    if (coord && Number.isFinite(coord.lat) && Number.isFinite(coord.lng) && isInHawaii(coord.lat, coord.lng)) {
-      item.row.lat = coord.lat;
-      item.row.lng = coord.lng;
-    }
-  }
-
-  const total = schoolsData.length;
-  const withCoords = schoolsData.filter(s => Number.isFinite(s.lat) && Number.isFinite(s.lng)).length;
-  const inHI = schoolsData.filter(s => Number.isFinite(s.lat) && Number.isFinite(s.lng) && isInHawaii(s.lat, s.lng)).length;
-  console.log("[Geocode] rows=" + total + ", coords=" + withCoords + ", inHawaii=" + inHI);
-}
-
-/* ========= Map & UI ========= */
-function initMap(){
-  map = L.map('map').setView([20.7967,-156.3319],7);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{ attribution:'© OpenStreetMap contributors' }).addTo(map);
-}
-
-function populateFilters(){
-  const complexAreas = [...new Set(schoolsData.map(s => s['Complex Area']).filter(Boolean))].sort();
-  const complexes    = [...new Set(schoolsData.map(s => s['Complex']).filter(Boolean))].sort();
-  const gradeStrings = [...new Set(schoolsData.map(s => normGrades(s['Grades'])).filter(Boolean))].sort((a,b)=>a.localeCompare(b, undefined, {numeric:true}));
-
-  populateSelect('complexArea', complexAreas);
-  populateSelect('complex', complexes);
-  populateSelect('gradeLevel', gradeStrings);
-}
-function populateSelect(id, options){
-  const el = document.getElementById(id);
-  const first = el.querySelector('option')?.outerHTML || '<option value="">All</option>';
-  el.innerHTML = first;
-  options.forEach(o=>{
-    const opt=document.createElement('option'); opt.value=o; opt.textContent=o; el.appendChild(opt);
-  });
-}
-
-function createPopupContent(school){
-  const util = parseFloat(String(school['Site Utilization']||"").replace('%','')) || 0;
-  const utilColor = util>90 ? '#e53e3e' : util>70 ? '#ed8936' : '#48bb78';
-  const hasEOEL = (school['EOEL PreK'] && school['EOEL PreK'].toLowerCase().includes('202')) ||
-                  ((parseInt(school['# EOEL Rooms'])||0) > 0);
-  const titleIBool = isTitleI(school);
-
-  return `
-    <div style="min-width:220px;">
-      <h4 style="margin-bottom:.5rem; color:#2d3748;">${school['Name of School'] || 'Unknown School'}</h4>
-      <div style="margin-bottom:.3rem;"><strong>Complex Area:</strong> ${school['Complex Area'] || 'N/A'}</div>
-      <div style="margin-bottom:.3rem;"><strong>Complex:</strong> ${school['Complex'] || 'N/A'}</div>
-      <div style="margin-bottom:.3rem;"><strong>Grades:</strong> ${school['Grades'] || 'N/A'}</div>
-      <div style="margin-bottom:.3rem;"><strong>EOEL Program:</strong> ${hasEOEL ? '✅ Yes' : '❌ No'}</div>
-      ${school['Total EOEL Capacity'] || school['EOEL Capacity'] ? `<div style="margin-bottom:.3rem;"><strong>EOEL Capacity:</strong> ${school['Total EOEL Capacity'] || school['EOEL Capacity']}</div>` : ''}
-      <div style="margin-bottom:.3rem;"><strong>Title I Eligible (≥47.2%):</strong> ${titleIBool ? '✅ Yes' : '❌ No'} ${school['Title I (24-25)'] ? `(${school['Title I (24-25)']})` : ''}</div>
-      <div style="margin-bottom:.3rem;"><strong>Site Utilization:</strong> <span style="color:${utilColor}; font-weight:bold;">${school['Site Utilization'] || 'N/A'}</span></div>
-      <div><strong>Enrollment:</strong> ${school['Current Enrollment (SY 24-25)'] || 'N/A'} / ${school['Site Capacity'] || 'N/A'}</div>
-    </div>`;
-}
-
-function displayMarkers(){
-  // remove old markers
-  markers.forEach(m=>map.removeLayer(m)); 
-  markers = [];
-
-  // group by exact lat/lng so we can spread overlapping points
-  const groups = new Map(); // key = "lat,lng" -> array of rows
-  for (const s of filteredData) {
-    if (Number.isFinite(s.lat) && Number.isFinite(s.lng) && isInHawaii(s.lat, s.lng)) {
-      const key = `${s.lat.toFixed(6)},${s.lng.toFixed(6)}`;
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key).push(s);
-    }
-  }
-
-  // small offset helper (spiral-ish)
-  function offsetAt(idx, total){
-    if (total === 1) return { dLat: 0, dLng: 0 };
-    const radius = 0.0025 * Math.ceil(idx/6); // ~250m rings
-    const angle  = (idx * 60) * (Math.PI/180); // 60° steps
-    // convert "radius" degrees roughly (good enough at Hawaii latitudes)
-    return { dLat: radius * Math.sin(angle), dLng: radius * Math.cos(angle) };
-  }
-
-  // draw groups with slight offsets so each point is clickable/visible
-  for (const [_, rows] of groups) {
-    rows.forEach((s, i) => {
-      const { dLat, dLng } = offsetAt(i, rows.length);
-      const lat = s.lat + dLat;
-      const lng = s.lng + dLng;
-
-      const hasEOEL = (s['EOEL PreK'] && s['EOEL PreK'].toLowerCase().includes('202')) ||
-                      ((parseInt(s['# EOEL Rooms'])||0) > 0);
-      const color = hasEOEL ? '#48bb78' : '#e53e3e';
-
-      const marker = L.circleMarker([lat, lng], {
-        radius: 6, fillColor: color, color:'#fff', weight:2, opacity:1, fillOpacity:.85
-      }).bindPopup(createPopupContent(s)).addTo(map);
-
-      markers.push(marker);
-    });
-  }
-}
-
-
-function applyFilters(){
-  const complexArea = document.getElementById('complexArea').value;
-  const complex = document.getElementById('complex').value;
-  const gradeLevel = document.getElementById('gradeLevel').value;
-  const eoelStatus = document.getElementById('eoelStatus').value;
-  const titleI = document.getElementById('titleI').value;
-  const utilizationFilter = document.getElementById('utilizationFilter').value;
-
-  filteredData = schoolsData.filter(s=>{
-    if (complexArea && s['Complex Area'] !== complexArea) return false;
-    if (complex && s['Complex'] !== complex) return false;
-    if (gradeLevel && normGrades(s['Grades']) !== gradeLevel) return false;
-
-    if (titleI) {
-      const eligible = isTitleI(s);
-      if (titleI === 'YES' && !eligible) return false;
-      if (titleI === 'NO'  &&  eligible) return false;
+    // ---------------- Sample data (fallback) ----------------
+    function loadSampleData(){
+      schoolsData = [
+        {"Name of School":"Wailuku Elementary School","School Code":"425","Complex Area":"Baldwin-Kekaulike-Kūlanihākoʻi-Maui","Complex":"Baldwin","Grades":"K-5","EOEL PreK":"2023 2024","EOEL Capacity":"40","# EOEL Rooms":"2","Title I (24-25)":"YES","Site Capacity":"789","Site Utilization":"67.81%","Current Enrollment (SY 24-25)":"535","English Language Learners":"18.00%","Zip Code":"96793","Principal":"Dr. Nikan Arapoff","Principal Email":"Nikan.Arapoff@k12.hi.us"},
+        {"Name of School":"Kahului Elementary School","School Code":"405","Complex Area":"Baldwin-Kekaulike-Kūlanihākoʻi-Maui","Complex":"Maui","Grades":"K-5","EOEL PreK":"","EOEL Capacity":"","# EOEL Rooms":"0","Title I (24-25)":"NO","Site Capacity":"825","Site Utilization":"94.30%","Current Enrollment (SY 24-25)":"778","English Language Learners":"18.00%","Zip Code":"96732","Principal":"Suzanne Forbes","Principal Email":"Suzanne.Forbes@k12.hi.us"},
+        {"Name of School":"Barbers Point Elementary School","School Code":"251","Complex Area":"Campbell-Kapolei","Complex":"Kapolei","Grades":"K-5","EOEL PreK":"2025 (1)","EOEL Capacity":"20","# EOEL Rooms":"1","Title I (24-25)":"NO","Site Capacity":"584","Site Utilization":"88.01%","Current Enrollment (SY 24-25)":"514","English Language Learners":"27.00%","Zip Code":"96707","Principal":"Aaron Okumura","Principal Email":"aaron.okumura@k12.hi.us"},
+        {"Name of School":"Hauʻula Elementary School","School Code":"303","Complex Area":"Castle-Kahuku","Complex":"Kahuku","Grades":"K-6","EOEL PreK":"2025 (2)","EOEL Capacity":"40","# EOEL Rooms":"2","Title I (24-25)":"NO","Site Capacity":"330","Site Utilization":"113.64%","Current Enrollment (SY 24-25)":"375","English Language Learners":"16.00%","Zip Code":"96717","Principal":"Uilani Kaitoku","Principal Email":"Uilani.Kaitoku@k12.hi.us"},
+        {"Name of School":"Hilo High School","School Code":"355","Complex Area":"Hilo-Waiākea","Complex":"Hilo","Grades":"9-12","EOEL PreK":"","EOEL Capacity":"","# EOEL Rooms":"0","Title I (24-25)":"NO","Site Capacity":"1070","Site Utilization":"109.35%","Current Enrollment (SY 24-25)":"1170","English Language Learners":"25.00%","Zip Code":"96720","Principal":"Jasmine Urasaki","Principal Email":"Jasmine.Urasaki@k12.hi.us"},
+        {"Name of School":"Lāna'i High & Elementary School","School Code":"415","Complex Area":"Hāna-Lahainaluna-Lānaʻi-Molokai","Complex":"Lānaʻi","Grades":"K-12","EOEL PreK":"2014 - E 2024 - H","EOEL Capacity":"37","# EOEL Rooms":"2","Title I (24-25)":"NO","Site Capacity":"624","Site Utilization":"91.67%","Current Enrollment (SY 24-25)":"572","English Language Learners":"17.00%","Zip Code":"96763","Principal":"Douglas Boyer","Principal Email":"Douglas.Boyer@k12.hi.us"}
+      ];
+      filteredData = [...schoolsData];
     }
 
-    if (eoelStatus){
-      const hasEOEL = (s['EOEL PreK'] && s['EOEL PreK'].toLowerCase().includes('202')) || ((parseInt(s['# EOEL Rooms'])||0) > 0);
-      if (eoelStatus==='has_eoel' && !hasEOEL) return false;
-      if (eoelStatus==='no_eoel'  &&  hasEOEL) return false;
-      if (eoelStatus==='planned'  && !(s['EOEL PreK'] && !hasEOEL)) return false;
+    // ---------------- Live data loader ----------------
+    async function loadLiveData(){
+      const btn = document.getElementById("loadDataBtn");
+      const info = document.getElementById("dataSourceInfo");
+      btn.textContent = "⏳ Loading…";
+      btn.disabled = true; info.textContent = "Connecting to Google Sheets…";
+
+      try{
+        const csvText = await fetch(SHEET_CSV_URL,{cache:"no-store"}).then(r=>{
+          if(!r.ok) throw new Error(`HTTP ${r.status}`);
+          return r.text();
+        });
+
+        const parsed = Papa.parse(csvText, { skipEmptyLines:true });
+        if (parsed.errors?.length) console.warn("Papa errors:", parsed.errors.slice(0,3));
+
+        const rows = parsed.data;
+        if (!rows || rows.length < 2) throw new Error("No data found in CSV.");
+
+        const headerIdx = detectHeaderRow(rows);
+        const rawHeaders = rows[headerIdx];
+        const dataRows = rows.slice(headerIdx+1);
+
+        const cleaned = [];
+        for (const r of dataRows){
+          const row = normalizeRow(r, rawHeaders);
+          const schoolName = row["Name of School"] || "";
+          const schoolCode = row["School Code"] || "";
+          if (!schoolName.trim() || !/^\d+$/.test(String(schoolCode).trim())) continue;
+          if (/^total/i.test(schoolName)) continue;
+          cleaned.push(row);
+        }
+
+        schoolsData = cleaned;
+        filteredData = [...schoolsData];
+        populateFilters();
+        await geocodeSchools();
+        displayMarkers();
+        updateStats();
+
+        btn.textContent = "✅ Live Data Loaded";
+        btn.style.background = "linear-gradient(135deg,#48bb78 0%,#38a169 100%)";
+        info.innerHTML = `<strong>✅ Live Google Sheets Data</strong><br>Loaded ${schoolsData.length} schools<br><small>Last updated: ${new Date().toLocaleString()}</small>`;
+        document.getElementById("loading").style.display = "none";
+      }catch(err){
+        console.error("Load failed:", err);
+        btn.textContent = "❌ Load Failed — Try Again";
+        btn.disabled = false;
+        info.innerHTML = `<strong>❌ Google Sheets Connection Failed</strong><br>Using sample data.<br><small>Error: ${err.message}</small>`;
+      }
     }
 
-    if (utilizationFilter){
-      const util = parseFloat(String(s['Site Utilization']||"").replace('%','')) || 0;
-      if (utilizationFilter==='under'   && util >= 70) return false;
-      if (utilizationFilter==='optimal' && (util < 70 || util > 95)) return false;
-      if (utilizationFilter==='over'    && util <= 95) return false;
+    // ---------------- Geocoding ----------------
+    const hawaiiZipCoords = {
+      "96701":{lat:21.3845,lng:-157.9284},"96706":{lat:21.3407,lng:-158.0515},"96707":{lat:21.3363,lng:-158.0711},
+      "96712":{lat:21.6389,lng:-158.0572},"96717":{lat:21.6877,lng:-157.9652},"96730":{lat:21.5647,lng:-157.8378},
+      "96731":{lat:21.6772,lng:-158.1058},"96734":{lat:21.4022,lng:-157.7394},"96744":{lat:21.4389,lng:-157.8583},
+      "96762":{lat:21.6447,lng:-158.0422},"96789":{lat:21.4511,lng:-158.0156},"96792":{lat:21.4389,lng:-158.1867},
+      "96815":{lat:21.2777,lng:-157.8262},"96816":{lat:21.2777,lng:-157.7408},"96817":{lat:21.3319,lng:-157.8583},
+      "96819":{lat:21.3319,lng:-157.8583},"96821":{lat:21.2777,lng:-157.7408},"96825":{lat:21.2777,lng:-157.7408},
+      "96703":{lat:21.9311,lng:-159.3617},"96705":{lat:22.0964,lng:-159.3286},"96714":{lat:22.0858,lng:-159.5019},
+      "96715":{lat:22.2011,lng:-159.4958},"96716":{lat:21.9311,lng:-159.3617},"96741":{lat:21.8847,lng:-159.3717},
+      "96746":{lat:21.9722,lng:-159.6506},"96751":{lat:21.9311,lng:-159.3617},"96754":{lat:21.9408,lng:-159.4075},
+      "96756":{lat:21.8847,lng:-159.6700},"96765":{lat:21.8847,lng:-159.6700},"96766":{lat:21.8847,lng:-159.6700},
+      "96769":{lat:21.9197,lng:-159.5036},"96796":{lat:21.9197,lng:-159.5036},"96720":{lat:19.7297,lng:-155.0890},
+      "96713":{lat:20.7886,lng:-156.0512},"96743":{lat:19.6405,lng:-155.9969},"96750":{lat:19.7297,lng:-155.0890},
+      "96740":{lat:19.7297,lng:-155.0890},"96749":{lat:19.5429,lng:-155.6659},"96755":{lat:19.5429,lng:-155.6659},
+      "96760":{lat:19.8968,lng:-155.5828},"96771":{lat:19.8968,lng:-155.5828},"96772":{lat:19.4925,lng:-155.8347},
+      "96773":{lat:19.4925,lng:-155.8347},"96774":{lat:19.5429,lng:-155.6659},"96777":{lat:19.4342,lng:-155.2711},
+      "96778":{lat:19.5429,lng:-155.6659},"96780":{lat:19.5429,lng:-155.6659},"96781":{lat:19.5429,lng:-155.6659},
+      "96783":{lat:20.0208,lng:-155.6686},"96785":{lat:19.7297,lng:-155.0890},
+      "96732":{lat:20.8893,lng:-156.4729},"96753":{lat:20.7539,lng:-156.4522},"96761":{lat:20.8783,lng:-156.6825},
+      "96768":{lat:20.8483,lng:-156.3256},"96779":{lat:20.9025,lng:-156.3647},"96790":{lat:20.7539,lng:-156.3256},
+      "96793":{lat:20.8893,lng:-156.5047},"96708":{lat:20.9222,lng:-156.3033},"96784":{lat:20.7539,lng:-156.4522},
+      "96786":{lat:20.7539,lng:-156.4522},"96787":{lat:20.9025,lng:-156.3647},"96788":{lat:20.9025,lng:-156.3647},
+      "96748":{lat:21.0985,lng:-157.0594},"96729":{lat:21.1444,lng:-157.0269},"96763":{lat:20.8283,lng:-156.9197},
+      "96770":{lat:21.1053,lng:-157.2051}
+    };
+
+    async function geocodeSchools() {
+      const unresolved = [];
+
+      for (const s of schoolsData) {
+        const ov = MANUAL_COORD_OVERRIDES[s['Name of School']];
+        if (ov && Number.isFinite(ov.lat) && Number.isFinite(ov.lng)) {
+          s.lat = ov.lat; s.lng = ov.lng; continue;
+        }
+
+        const lat = parseFloat(s['Latitude'] ?? s['Lat']);
+        const lng = parseFloat(s['Longitude'] ?? s['Lng'] ?? s['Long']);
+        if (Number.isFinite(lat) && Number.isFinite(lng)) {
+          s.lat = lat; s.lng = lng; continue;
+        }
+
+        const q = buildGeocodeQuery(s);
+        if (q) {
+          unresolved.push({ row: s, q });
+        } else {
+          const zip = (s['Zip Code'] || s['ZIP Code'] || '').toString().trim();
+          const z5 = (zip.match(/\b(\d{5})\b/) || [,''])[1];
+          const centroid = z5 && hawaiiZipCoords[z5] ? hawaiiZipCoords[z5] : null;
+          if (centroid) { s.lat = centroid.lat; s.lng = centroid.lng; }
+          else { s.lat = null; s.lng = null; }
+        }
+      }
+
+      for (const item of unresolved) {
+        const coord = await geocodeNominatim(item.q);
+        if (coord && Number.isFinite(coord.lat) && Number.isFinite(coord.lng)) {
+          item.row.lat = coord.lat;
+          item.row.lng = coord.lng;
+        } else {
+          const zip = (item.row['Zip Code'] || item.row['ZIP Code'] || '').toString().trim();
+          const z5 = (zip.match(/\b(\d{5})\b/) || [,''])[1];
+          const centroid = z5 && hawaiiZipCoords[z5] ? hawaiiZipCoords[z5] : null;
+          if (centroid) { item.row.lat = centroid.lat; item.row.lng = centroid.lng; }
+          else { item.row.lat = null; item.row.lng = null; }
+        }
+      }
     }
-    return true;
-  });
 
-  displayMarkers();
-  updateStats();
-}
-
-function clearFilters(){
-  document.getElementById('complexArea').value='';
-  document.getElementById('complex').value='';
-  document.getElementById('gradeLevel').value='';
-  document.getElementById('eoelStatus').value='';
-  document.getElementById('titleI').value='';
-  document.getElementById('utilizationFilter').value='';
-  filteredData=[...schoolsData];
-  displayMarkers(); updateStats();
-}
-
-function updateStats(){
-  const totalSchools = filteredData.length;
-  const eoelCount = filteredData.filter(s => (s['EOEL PreK'] && s['EOEL PreK'].toLowerCase().includes('202')) || ((parseInt(s['# EOEL Rooms'])||0)>0)).length;
-  const titleICount = filteredData.filter(s => isTitleI(s)).length;
-
-  const totalEOELCapacity = filteredData.reduce((sum,s)=>{
-    const a = parseInt(s["EOEL Capacity"]) || 0;
-    const b = parseInt(s["Total EOEL Capacity"]) || 0;
-    return sum + (b>0 ? b : a);
-  },0);
-
-  const avgUtilization = filteredData.length>0
-    ? filteredData.reduce((sum,s)=>{
-        const util = parseFloat(String(s['Site Utilization']||"").replace('%','')) || 0;
-        return sum + util;
-      },0) / filteredData.length
-    : 0;
-
-  document.getElementById('totalSchools').textContent = totalSchools;
-  document.getElementById('eoelCount').textContent = eoelCount;
-  document.getElementById('eoelCapacity').textContent = totalEOELCapacity;
-  document.getElementById('avgUtilization').textContent = avgUtilization.toFixed(1) + '%';
-  document.getElementById('titleICount').textContent = titleICount;
-}
-
-/* ========= Executive tools ========= */
-function generateExecutiveSummary(){
-  const modal = document.getElementById('executiveModal');
-  const content = document.getElementById('executiveContent');
-
-  const activeFilters = [];
-  const complexArea = document.getElementById('complexArea').value;
-  const complex = document.getElementById('complex').value;
-  const gradeLevel = document.getElementById('gradeLevel').value;
-  const eoelStatus = document.getElementById('eoelStatus').value;
-  const titleI = document.getElementById('titleI').value;
-  const utilizationFilter = document.getElementById('utilizationFilter').value;
-
-  if (complexArea) activeFilters.push(`Complex Area: ${complexArea}`);
-  if (complex)     activeFilters.push(`Complex: ${complex}`);
-  if (gradeLevel)  activeFilters.push(`Grades: ${gradeLevel}`);
-  if (eoelStatus)  activeFilters.push(`EOEL Status: ${eoelStatus}`);
-  if (titleI)      activeFilters.push(`Title I: ${titleI === 'YES' ? 'Eligible' : 'Not Eligible'} (≥47.2%)`);
-  if (utilizationFilter) activeFilters.push(`Utilization: ${utilizationFilter}`);
-
-  const totalSchools = filteredData.length;
-  const eoelCount = filteredData.filter(s => (s['EOEL PreK'] && s['EOEL PreK'].toLowerCase().includes('202')) || ((parseInt(s['# EOEL Rooms'])||0)>0)).length;
-  const titleICount = filteredData.filter(s => isTitleI(s)).length;
-  const totalEOELCapacity = filteredData.reduce((sum,s)=>{
-    const a=parseInt(s["EOEL Capacity"])||0; const b=parseInt(s["Total EOEL Capacity"])||0;
-    return sum + (b>0?b:a);
-  },0);
-
-  const areaBreakdown = {};
-  filteredData.forEach(s=>{
-    const area = s['Complex Area'] || 'Unknown';
-    if (!areaBreakdown[area]) areaBreakdown[area] = {count:0, eoel:0, capacity:0, titleI:0};
-    areaBreakdown[area].count++;
-    const hasEOEL = (s['EOEL PreK'] && s['EOEL PreK'].toLowerCase().includes('202')) || ((parseInt(s['# EOEL Rooms'])||0)>0);
-    if (hasEOEL){
-      areaBreakdown[area].eoel++;
-      areaBreakdown[area].capacity += (parseInt(s['Total EOEL Capacity'])||parseInt(s['EOEL Capacity'])||0);
+    // ---------------- Map & UI ----------------
+    function initMap(){
+      map = L.map('map').setView([20.7967,-156.3319],7);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{ attribution:'© OpenStreetMap contributors' }).addTo(map);
     }
-    if (isTitleI(s)) areaBreakdown[area].titleI++;
-  });
 
-  content.innerHTML = `
-    <div style="padding:2rem; font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
-      <div style="text-align:center; margin-bottom:2rem; border-bottom:2px solid #667eea; padding-bottom:1rem;">
-        <h1 style="color:#2d3748; margin-bottom:.5rem;">EOEL Hawaii Early Childhood Executive Summary</h1>
-        <p style="color:#4a5568; font-size:1.1rem;">Program Analysis • Generated ${new Date().toLocaleDateString()}</p>
-        ${activeFilters.length ? `<p style="color:#667eea; font-style:italic;">Filtered by: ${activeFilters.join(', ')}</p>` : ''}
-      </div>
+    function populateFilters(){
+      const complexAreas = [...new Set(schoolsData.map(s => s['Complex Area']).filter(Boolean))].sort();
+      const complexes    = [...new Set(schoolsData.map(s => s['Complex']).filter(Boolean))].sort();
+      const gradeStrings = [...new Set(
+        schoolsData.map(s => normGrades(s['Grades'])).filter(Boolean)
+      )].sort((a,b)=>a.localeCompare(b, undefined, {numeric:true}));
 
-      <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:1.5rem; margin-bottom:2rem;">
-        <div style="background:linear-gradient(135deg,#667eea,#764ba2); color:#fff; padding:1.5rem; border-radius:8px; text-align:center;">
-          <div style="font-size:2.5rem; font-weight:bold; margin-bottom:.5rem;">${totalSchools}</div><div style="opacity:.9;">Total Schools</div>
-        </div>
-        <div style="background:linear-gradient(135deg,#48bb78,#38a169); color:#fff; padding:1.5rem; border-radius:8px; text-align:center;">
-          <div style="font-size:2.5rem; font-weight:bold; margin-bottom:.5rem;">${eoelCount}</div><div style="opacity:.9;">EOEL Programs</div>
-        </div>
-        <div style="background:linear-gradient(135deg,#ed8936,#dd6b20); color:#fff; padding:1.5rem; border-radius:8px; text-align:center;">
-          <div style="font-size:2.5rem; font-weight:bold; margin-bottom:.5rem;">${totalEOELCapacity}</div><div style="opacity:.9;">EOEL Capacity</div>
-        </div>
-        <div style="background:linear-gradient(135deg,#9f7aea,#805ad5); color:#fff; padding:1.5rem; border-radius:8px; text-align:center;">
-          <div style="font-size:2.5rem; font-weight:bold; margin-bottom:.5rem;">${titleICount}</div><div style="opacity:.9;">Title I Eligible (≥47.2%)</div>
-        </div>
-      </div>
+      populateSelect('complexArea', complexAreas);
+      populateSelect('complex', complexes);
+      populateSelect('gradeLevel', gradeStrings);
+    }
+    function populateSelect(id, options){
+      const el = document.getElementById(id);
+      const first = el.querySelector('option')?.outerHTML || '<option value="">All</option>';
+      el.innerHTML = first;
+      options.forEach(o=>{
+        const opt=document.createElement('option'); opt.value=o; opt.textContent=o; el.appendChild(opt);
+      });
+    }
 
-      <div style="margin-bottom:2rem;">
-        <h2 style="color:#2d3748; margin-bottom:1rem; border-bottom:1px solid #e2e8f0; padding-bottom:.5rem;">Complex Area Analysis</h2>
-        <div style="overflow-x:auto;">
-          <table style="width:100%; border-collapse:collapse; background:#fff; border-radius:8px; overflow:hidden; box-shadow:0 2px 10px rgba(0,0,0,.1);">
-            <thead style="background:#f7fafc;">
-              <tr>
-                <th style="padding:1rem; text-align:left; border-bottom:1px solid #e2e8f0;">Complex Area</th>
-                <th style="padding:1rem; text-align:center; border-bottom:1px solid #e2e8f0;">Total Schools</th>
-                <th style="padding:1rem; text-align:center; border-bottom:1px solid #e2e8f0;">EOEL Programs</th>
-                <th style="padding:1rem; text-align:center; border-bottom:1px solid #e2e8f0;">EOEL Capacity</th>
-                <th style="padding:1rem; text-align:center; border-bottom:1px solid #e2e8f0;">Title I Eligible</th>
-                <th style="padding:1rem; text-align:center; border-bottom:1px solid #e2e8f0;">Coverage %</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${Object.entries(areaBreakdown).map(([area,d])=>`
-                <tr style="border-bottom:1px solid #f1f5f9;">
-                  <td style="padding:1rem; font-weight:500;">${area}</td>
-                  <td style="padding:1rem; text-align:center;">${d.count}</td>
-                  <td style="padding:1rem; text-align:center;">${d.eoel}</td>
-                  <td style="padding:1rem; text-align:center;">${d.capacity}</td>
-                  <td style="padding:1rem; text-align:center;">${d.titleI}</td>
-                  <td style="padding:1rem; text-align:center;">${((d.eoel/d.count)*100).toFixed(1)}%</td>
-                </tr>`).join('')}
-            </tbody>
-          </table>
-        </div>
-      </div>
+    function createPopupContent(school){
+      const util = parseFloat(String(school['Site Utilization']||"").replace('%','')) || 0;
+      const utilColor = util>90 ? '#e53e3e' : util>70 ? '#ed8936' : '#48bb78';
+      const hasEOEL = (school['EOEL PreK'] && String(school['EOEL PreK']).toLowerCase().includes('202')) ||
+                      ((parseInt(school['# EOEL Rooms'])||0) > 0);
 
-      <div style="margin-bottom:2rem;">
-        <h2 style="color:#2d3748; margin-bottom:1rem; border-bottom:1px solid #e2e8f0; padding-bottom:.5rem;">Executive Insights</h2>
-        <div style="background:#f7fafc; padding:1.5rem; border-radius:8px; border-left:4px solid #667eea;">
-          <ul style="margin:0; padding-left:1.5rem; line-height:1.6;">
-            <li><strong>Program Coverage:</strong> ${((eoelCount/totalSchools)*100).toFixed(1)}% of schools have EOEL programs</li>
-            <li><strong>Total Early Learning Capacity:</strong> ${totalEOELCapacity} children served</li>
-            <li><strong>Title I Eligibility:</strong> ${((titleICount/totalSchools)*100).toFixed(1)}% at or above 47.2%</li>
-            <li><strong>Geographic Distribution:</strong> ${Object.keys(areaBreakdown).length} complex areas represented</li>
-            <li><strong>Expansion Opportunities:</strong> ${totalSchools - eoelCount} schools without current EOEL programs</li>
-          </ul>
-        </div>
-      </div>
+      return `
+        <div style="min-width:220px;">
+          <h4 style="margin-bottom:.5rem; color:#2d3748;">${school['Name of School'] || 'Unknown School'}</h4>
+          <div style="margin-bottom:.3rem;"><strong>Complex Area:</strong> ${school['Complex Area'] || 'N/A'}</div>
+          <div style="margin-bottom:.3rem;"><strong>Complex:</strong> ${school['Complex'] || 'N/A'}</div>
+          <div style="margin-bottom:.3rem;"><strong>Grades:</strong> ${school['Grades'] || 'N/A'}</div>
+          <div style="margin-bottom:.3rem;"><strong>EOEL Program:</strong> ${hasEOEL ? '✅ Yes' : '❌ No'}</div>
+          ${school['Total EOEL Capacity'] || school['EOEL Capacity'] ? `<div style="margin-bottom:.3rem;"><strong>EOEL Capacity:</strong> ${school['Total EOEL Capacity'] || school['EOEL Capacity']}</div>` : ''}
+          <div style="margin-bottom:.3rem;"><strong>Title I:</strong> ${school['Title I (24-25)'] || 'N/A'}</div>
+          <div style="margin-bottom:.3rem;"><strong>Site Utilization:</strong> <span style="color:${utilColor}; font-weight:bold;">${school['Site Utilization'] || 'N/A'}</span></div>
+          <div><strong>Enrollment:</strong> ${school['Current Enrollment (SY 24-25)'] || 'N/A'} / ${school['Site Capacity'] || 'N/A'}</div>
+        </div>`;
+    }
 
-      <div style="text-align:center; margin-top:2rem; padding-top:1rem; border-top:1px solid #e2e8f0; color:#4a5568; font-size:.9rem;">
-        <p>Generated by EOEL Executive Dashboard • Hawaii Department of Education</p>
-        <p>For questions contact: EOEL Data Team</p>
-      </div>
-    </div>`;
-  modal.style.display='block';
-}
+    // --- De-overlap jitter so stacked points render distinctly ---
+    function displayMarkers(){
+      markers.forEach(m=>map.removeLayer(m)); 
+      markers = [];
 
-/* ========= Report/Share/Table ========= */
-function showCustomReportBuilder() {
-  const modal = document.getElementById('customReportModal');
-  const fieldSelector = document.getElementById('fieldSelector');
+      // Group by identical coords to offset them
+      const groups = new Map(); // key = "lat,lng" -> array of rows
+      for (const s of filteredData) {
+        if (Number.isFinite(s.lat) && Number.isFinite(s.lng) && isInHawaii(s.lat, s.lng)) {
+          const key = `${s.lat.toFixed(6)},${s.lng.toFixed(6)}`;
+          if (!groups.has(key)) groups.set(key, []);
+          groups.get(key).push(s);
+        }
+      }
 
-  const allKeys = Array.from(new Set(
-    filteredData.flatMap(Object.keys)
-  )).filter(k => !['lat','lng','__level'].includes(k));
+      function offsetAt(idx, total){
+        if (total === 1) return { dLat: 0, dLng: 0 };
+        const radius = 0.0025 * Math.ceil(idx/6); // ~250m rings
+        const angle  = (idx * 60) * (Math.PI/180); // 60° steps
+        return { dLat: radius * Math.sin(angle), dLng: radius * Math.cos(angle) };
+      }
 
-  const preferred = new Set([
-    'Name of School','School Code','Complex Area','Complex','Grades',
-    'EOEL PreK','Total EOEL Capacity','EOEL Capacity','# EOEL Rooms',
-    'Title I (24-25)','Site Capacity','Site Utilization',
-    'Current Enrollment (SY 24-25)','Zip Code','Principal','Principal Email'
-  ]);
-  const sorted = [
-    ...allKeys.filter(k => preferred.has(k)),
-    ...allKeys.filter(k => !preferred.has(k)).sort()
-  ];
+      for (const rows of groups.values()) {
+        rows.forEach((s, i) => {
+          const { dLat, dLng } = offsetAt(i, rows.length);
+          const lat = s.lat + dLat;
+          const lng = s.lng + dLng;
 
-  const searchBoxId = 'fieldSearchBox';
-  fieldSelector.innerHTML = `
-    <input id="${searchBoxId}" placeholder="Search fields…" style="width:100%; padding:.5rem; margin-bottom:.75rem; border:1px solid #e2e8f0; border-radius:6px;">
-    <div id="fieldList"></div>`;
-  const fieldList = fieldSelector.querySelector('#fieldList');
+          const hasEOEL = (s['EOEL PreK'] && String(s['EOEL PreK']).toLowerCase().includes('202')) ||
+                          ((parseInt(s['# EOEL Rooms'])||0) > 0);
+          const color = hasEOEL ? '#48bb78' : '#e53e3e';
 
-  function render(list){
-    fieldList.innerHTML = '';
-    list.forEach(field => {
-      const div = document.createElement('div');
-      div.style.marginBottom = '.5rem';
-      div.innerHTML = `
-        <label style="display:flex; align-items:center; cursor:pointer; padding:.4rem; border-radius:4px;">
-          <input type="checkbox" value="${field}" style="margin-right:.5rem;">
-          <span>${field}</span>
-        </label>`;
-      fieldList.appendChild(div);
-    });
-    updateSelectionSummary();
-  }
+          const marker = L.circleMarker([lat, lng], {
+            radius: 6, fillColor: color, color:'#fff', weight:2, opacity:1, fillOpacity:.85
+          }).bindPopup(createPopupContent(s)).addTo(map);
 
-  render(sorted);
-  fieldSelector.querySelector('#'+searchBoxId).addEventListener('input', (e)=>{
-    const q = e.target.value.toLowerCase();
-    render(sorted.filter(f => f.toLowerCase().includes(q)));
-  });
+          markers.push(marker);
+        });
+      }
+    }
 
-  modal.style.display = 'block';
-}
+    function applyFilters(){
+      const complexArea = document.getElementById('complexArea').value;
+      const complex = document.getElementById('complex').value;
+      const gradeLevel = document.getElementById('gradeLevel').value; // exact Grades string
+      const eoelStatus = document.getElementById('eoelStatus').value;
+      const titleI = document.getElementById('titleI').value;
+      const utilizationFilter = document.getElementById('utilizationFilter').value;
 
-function shareCurrentView(){
-  const modal = document.getElementById('shareModal');
-  const shareURL = document.getElementById('shareURL');
-  const emailTemplate = document.getElementById('emailTemplate');
+      filteredData = schoolsData.filter(s=>{
+        if (complexArea && s['Complex Area'] !== complexArea) return false;
+        if (complex && s['Complex'] !== complex) return false;
+        if (gradeLevel && normGrades(s['Grades']) !== gradeLevel) return false;
+        if (titleI && (s['Title I (24-25)']||"").toUpperCase() !== titleI.toUpperCase()) return false;
 
-  const params = new URLSearchParams();
-  const complexArea = document.getElementById('complexArea').value;
-  const complex = document.getElementById('complex').value;
-  const gradeLevel = document.getElementById('gradeLevel').value;
-  const eoelStatus = document.getElementById('eoelStatus').value;
-  const titleI = document.getElementById('titleI').value;
-  const utilizationFilter = document.getElementById('utilizationFilter').value;
+        if (eoelStatus){
+          const hasEOEL = (s['EOEL PreK'] && String(s['EOEL PreK']).toLowerCase().includes('202')) || ((parseInt(s['# EOEL Rooms'])||0) > 0);
+          if (eoelStatus==='has_eoel' && !hasEOEL) return false;
+          if (eoelStatus==='no_eoel'  &&  hasEOEL) return false;
+          if (eoelStatus==='planned'  && !(s['EOEL PreK'] && !hasEOEL)) return false;
+        }
 
-  if (complexArea) params.append('complexArea', complexArea);
-  if (complex) params.append('complex', complex);
-  if (gradeLevel) params.append('gradeLevel', gradeLevel);
-  if (eoelStatus) params.append('eoelStatus', eoelStatus);
-  if (titleI) params.append('titleI', titleI);
-  if (utilizationFilter) params.append('utilizationFilter', utilizationFilter);
+        if (utilizationFilter){
+          const util = parseFloat(String(s['Site Utilization']||"").replace('%','')) || 0;
+          if (utilizationFilter==='under'   && util >= 70) return false;
+          if (utilizationFilter==='optimal' && (util < 70 || util > 95)) return false;
+          if (utilizationFilter==='over'    && util <= 95) return false;
+        }
+        return true;
+      });
 
-  const baseURL = window.location.origin + window.location.pathname;
-  const fullURL = params.toString() ? `${baseURL}?${params.toString()}` : baseURL;
-  shareURL.value = fullURL;
+      displayMarkers();
+      updateStats();
+    }
 
-  const filterSummary = [];
-  if (complexArea) filterSummary.push(`Complex Area: ${complexArea}`);
-  if (complex) filterSummary.push(`Complex: ${complex}`);
-  if (gradeLevel) filterSummary.push(`Grades: ${gradeLevel}`);
-  if (eoelStatus) filterSummary.push(`EOEL Status: ${eoelStatus}`);
-  if (titleI) filterSummary.push(`Title I: ${titleI === 'YES' ? 'Eligible' : 'Not Eligible'} (≥47.2%)`);
-  if (utilizationFilter) filterSummary.push(`Utilization: ${utilizationFilter}`);
+    function clearFilters(){
+      document.getElementById('complexArea').value='';
+      document.getElementById('complex').value='';
+      document.getElementById('gradeLevel').value='';
+      document.getElementById('eoelStatus').value='';
+      document.getElementById('titleI').value='';
+      document.getElementById('utilizationFilter').value='';
+      filteredData=[...schoolsData];
+      displayMarkers(); updateStats();
+    }
 
-  const totalSchools = filteredData.length;
-  const eoelCount = filteredData.filter(s => (s['EOEL PreK'] && s['EOEL PreK'].toLowerCase().includes('202')) || ((parseInt(s['# EOEL Rooms'])||0)>0)).length;
+    function updateStats(){
+      const totalSchools = filteredData.length;
+      const eoelCount = filteredData.filter(s => (s['EOEL PreK'] && String(s['EOEL PreK']).toLowerCase().includes('202')) || ((parseInt(s['# EOEL Rooms'])||0)>0)).length;
+      const titleICount = filteredData.filter(s => (s['Title I (24-25)']||"").toUpperCase()==='YES').length;
 
-  // FIXED: no nested backticks
-  const applied = filterSummary.length > 0
-    ? 'Applied Filters: ' + filterSummary.join(', ')
-    : 'Showing all schools in dataset';
+      const totalEOELCapacity = filteredData.reduce((sum,s)=>{
+        const a = parseInt(s["EOEL Capacity"]) || 0;
+        const b = parseInt(s["Total EOEL Capacity"]) || 0;
+        return sum + (b>0 ? b : a);
+      },0);
 
-  emailTemplate.value =
-`Subject: EOEL Hawaii Early Childhood Data - Dashboard View
+      const avgUtilization = filteredData.length>0
+        ? filteredData.reduce((sum,s)=>{
+            const util = parseFloat(String(s['Site Utilization']||"").replace('%','')) || 0;
+            return sum + util;
+          },0) / filteredData.length
+        : 0;
+
+      document.getElementById('totalSchools').textContent = totalSchools;
+      document.getElementById('eoelCount').textContent = eoelCount;
+      document.getElementById('eoelCapacity').textContent = totalEOELCapacity;
+      document.getElementById('avgUtilization').textContent = avgUtilization.toFixed(1) + '%';
+      document.getElementById('titleICount').textContent = titleICount;
+    }
+
+    // ---------------- Executive tools ----------------
+    function generateExecutiveSummary(){
+      const modal = document.getElementById('executiveModal');
+      const content = document.getElementById('executiveContent');
+
+      const activeFilters = [];
+      const complexArea = document.getElementById('complexArea').value;
+      const complex = document.getElementById('complex').value;
+      const gradeLevel = document.getElementById('gradeLevel').value;
+      const eoelStatus = document.getElementById('eoelStatus').value;
+      const titleI = document.getElementById('titleI').value;
+      const utilizationFilter = document.getElementById('utilizationFilter').value;
+
+      if (complexArea) activeFilters.push(`Complex Area: ${complexArea}`);
+      if (complex)     activeFilters.push(`Complex: ${complex}`);
+      if (gradeLevel)  activeFilters.push(`Grades: ${gradeLevel}`);
+      if (eoelStatus)  activeFilters.push(`EOEL Status: ${eoelStatus}`);
+      if (titleI)      activeFilters.push(`Title I: ${titleI}`);
+      if (utilizationFilter) activeFilters.push(`Utilization: ${utilizationFilter}`);
+
+      const totalSchools = filteredData.length;
+      const eoelCount = filteredData.filter(s => (s['EOEL PreK'] && String(s['EOEL PreK']).toLowerCase().includes('202')) || ((parseInt(s['# EOEL Rooms'])||0)>0)).length;
+      const titleICount = filteredData.filter(s => (s['Title I (24-25)']||"").toUpperCase()==='YES').length;
+      const totalEOELCapacity = filteredData.reduce((sum,s)=>{
+        const a=parseInt(s["EOEL Capacity"])||0; const b=parseInt(s["Total EOEL Capacity"])||0;
+        return sum + (b>0?b:a);
+      },0);
+
+      const areaBreakdown = {};
+      filteredData.forEach(s=>{
+        const area = s['Complex Area'] || 'Unknown';
+        if (!areaBreakdown[area]) areaBreakdown[area] = {count:0, eoel:0, capacity:0, titleI:0};
+        areaBreakdown[area].count++;
+        const hasEOEL = (s['EOEL PreK'] && String(s['EOEL PreK']).toLowerCase().includes('202')) || ((parseInt(s['# EOEL Rooms'])||0)>0);
+        if (hasEOEL){
+          areaBreakdown[area].eoel++;
+          areaBreakdown[area].capacity += (parseInt(s['Total EOEL Capacity'])||parseInt(s['EOEL Capacity'])||0);
+        }
+        if ((s['Title I (24-25)']||"").toUpperCase()==='YES') areaBreakdown[area].titleI++;
+      });
+
+      content.innerHTML = `
+        <div style="padding:2rem; font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
+          <div style="text-align:center; margin-bottom:2rem; border-bottom:2px solid #667eea; padding-bottom:1rem;">
+            <h1 style="color:#2d3748; margin-bottom:.5rem;">EOEL Hawaii Early Childhood Executive Summary</h1>
+            <p style="color:#4a5568; font-size:1.1rem;">Program Analysis • Generated ${new Date().toLocaleDateString()}</p>
+            ${activeFilters.length ? `<p style="color:#667eea; font-style:italic;">Filtered by: ${activeFilters.join(', ')}</p>` : ''}
+          </div>
+
+          <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:1.5rem; margin-bottom:2rem;">
+            <div style="background:linear-gradient(135deg,#667eea,#764ba2); color:#fff; padding:1.5rem; border-radius:8px; text-align:center;">
+              <div style="font-size:2.5rem; font-weight:bold; margin-bottom:.5rem;">${totalSchools}</div><div style="opacity:.9;">Total Schools</div>
+            </div>
+            <div style="background:linear-gradient(135deg,#48bb78,#38a169); color:#fff; padding:1.5rem; border-radius:8px; text-align:center;">
+              <div style="font-size:2.5rem; font-weight:bold; margin-bottom:.5rem;">${eoelCount}</div><div style="opacity:.9;">EOEL Programs</div>
+            </div>
+            <div style="background:linear-gradient(135deg,#ed8936,#dd6b20); color:#fff; padding:1.5rem; border-radius:8px; text-align:center;">
+              <div style="font-size:2.5rem; font-weight:bold; margin-bottom:.5rem;">${totalEOELCapacity}</div><div style="opacity:.9;">EOEL Capacity</div>
+            </div>
+            <div style="background:linear-gradient(135deg,#9f7aea,#805ad5); color:#fff; padding:1.5rem; border-radius:8px; text-align:center;">
+              <div style="font-size:2.5rem; font-weight:bold; margin-bottom:.5rem;">${titleICount}</div><div style="opacity:.9;">Title I Schools</div>
+            </div>
+          </div>
+
+          <div style="margin-bottom:2rem;">
+            <h2 style="color:#2d3748; margin-bottom:1rem; border-bottom:1px solid #e2e8f0; padding-bottom:.5rem;">Complex Area Analysis</h2>
+            <div style="overflow-x:auto;">
+              <table style="width:100%; border-collapse:collapse; background:#fff; border-radius:8px; overflow:hidden; box-shadow:0 2px 10px rgba(0,0,0,.1);">
+                <thead style="background:#f7fafc;">
+                  <tr>
+                    <th style="padding:1rem; text-align:left; border-bottom:1px solid #e2e8f0;">Complex Area</th>
+                    <th style="padding:1rem; text-align:center; border-bottom:1px solid #e2e8f0;">Total Schools</th>
+                    <th style="padding:1rem; text-align:center; border-bottom:1px solid #e2e8f0;">EOEL Programs</th>
+                    <th style="padding:1rem; text-align:center; border-bottom:1px solid #e2e8f0;">EOEL Capacity</th>
+                    <th style="padding:1rem; text-align:center; border-bottom:1px solid #e2e8f0;">Title I Schools</th>
+                    <th style="padding:1rem; text-align:center; border-bottom:1px solid #e2e8f0;">Coverage %</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${Object.entries(areaBreakdown).map(([area,d])=>`
+                    <tr style="border-bottom:1px solid #f1f5f9;">
+                      <td style="padding:1rem; font-weight:500;">${area}</td>
+                      <td style="padding:1rem; text-align:center;">${d.count}</td>
+                      <td style="padding:1rem; text-align:center;">${d.eoel}</td>
+                      <td style="padding:1rem; text-align:center;">${d.capacity}</td>
+                      <td style="padding:1rem; text-align:center;">${d.titleI}</td>
+                      <td style="padding:1rem; text-align:center;">${((d.eoel/d.count)*100).toFixed(1)}%</td>
+                    </tr>`).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div style="margin-bottom:2rem;">
+            <h2 style="color:#2d3748; margin-bottom:1rem; border-bottom:1px solid #e2e8f0; padding-bottom:.5rem;">Executive Insights</h2>
+            <div style="background:#f7fafc; padding:1.5rem; border-radius:8px; border-left:4px solid #667eea;">
+              <ul style="margin:0; padding-left:1.5rem; line-height:1.6;">
+                <li><strong>Program Coverage:</strong> ${((eoelCount/totalSchools)*100).toFixed(1)}% of schools have EOEL programs</li>
+                <li><strong>Total Early Learning Capacity:</strong> ${totalEOELCapacity} children served</li>
+                <li><strong>Title I Integration:</strong> ${((titleICount/totalSchools)*100).toFixed(1)}% are Title I schools</li>
+                <li><strong>Geographic Distribution:</strong> ${Object.keys(areaBreakdown).length} complex areas represented</li>
+                <li><strong>Expansion Opportunities:</strong> ${totalSchools - eoelCount} schools without current EOEL programs</li>
+              </ul>
+            </div>
+          </div>
+
+          <div style="text-align:center; margin-top:2rem; padding-top:1rem; border-top:1px solid #e2e8f0; color:#4a5568; font-size:.9rem;">
+            <p>Generated by EOEL Executive Dashboard • Hawaii Department of Education</p>
+            <p>For questions contact: EOEL Data Team</p>
+          </div>
+        </div>`;
+      modal.style.display='block';
+    }
+
+    function showCustomReportBuilder() {
+      const modal = document.getElementById('customReportModal');
+      const fieldSelector = document.getElementById('fieldSelector');
+
+      const allKeys = Array.from(new Set(
+        filteredData.flatMap(Object.keys)
+      )).filter(k => !['lat','lng','__level'].includes(k));
+
+      const preferred = new Set([
+        'Name of School','School Code','Complex Area','Complex','Grades',
+        'EOEL PreK','Total EOEL Capacity','EOEL Capacity','# EOEL Rooms',
+        'Title I (24-25)','Site Capacity','Site Utilization',
+        'Current Enrollment (SY 24-25)','Zip Code','Principal','Principal Email'
+      ]);
+      const sorted = [
+        ...allKeys.filter(k => preferred.has(k)),
+        ...allKeys.filter(k => !preferred.has(k)).sort()
+      ];
+
+      const searchBoxId = 'fieldSearchBox';
+      fieldSelector.innerHTML = `
+        <input id="${searchBoxId}" placeholder="Search fields…" style="width:100%; padding:.5rem; margin-bottom:.75rem; border:1px solid #e2e8f0; border-radius:6px;">
+        <div id="fieldList"></div>`;
+      const fieldList = fieldSelector.querySelector('#fieldList');
+
+      function render(list){
+        fieldList.innerHTML = '';
+        list.forEach(field => {
+          const div = document.createElement('div');
+          div.style.marginBottom = '.5rem';
+          div.innerHTML = `
+            <label style="display:flex; align-items:center; cursor:pointer; padding:.4rem; border-radius:4px;">
+              <input type="checkbox" value="${field}" style="margin-right:.5rem;">
+              <span>${field}</span>
+            </label>`;
+          fieldList.appendChild(div);
+        });
+        updateSelectionSummary();
+      }
+
+      render(sorted);
+      fieldSelector.querySelector('#'+searchBoxId).addEventListener('input', (e)=>{
+        const q = e.target.value.toLowerCase();
+        render(sorted.filter(f => f.toLowerCase().includes(q)));
+      });
+
+      modal.style.display = 'block';
+    }
+
+    function shareCurrentView(){
+      const modal = document.getElementById('shareModal');
+      const shareURL = document.getElementById('shareURL');
+      const emailTemplate = document.getElementById('emailTemplate');
+
+      const params = new URLSearchParams();
+      const complexArea = document.getElementById('complexArea').value;
+      const complex = document.getElementById('complex').value;
+      const gradeLevel = document.getElementById('gradeLevel').value;
+      const eoelStatus = document.getElementById('eoelStatus').value;
+      const titleI = document.getElementById('titleI').value;
+      const utilizationFilter = document.getElementById('utilizationFilter').value;
+
+      if (complexArea) params.append('complexArea', complexArea);
+      if (complex) params.append('complex', complex);
+      if (gradeLevel) params.append('gradeLevel', gradeLevel);
+      if (eoelStatus) params.append('eoelStatus', eoelStatus);
+      if (titleI) params.append('titleI', titleI);
+      if (utilizationFilter) params.append('utilizationFilter', utilizationFilter);
+
+      const baseURL = window.location.origin + window.location.pathname;
+      const fullURL = params.toString() ? `${baseURL}?${params.toString()}` : baseURL;
+      shareURL.value = fullURL;
+
+      const filterSummary = [];
+      if (complexArea) filterSummary.push(`Complex Area: ${complexArea}`);
+      if (complex) filterSummary.push(`Complex: ${complex}`);
+      if (gradeLevel) filterSummary.push(`Grades: ${gradeLevel}`);
+      if (eoelStatus) filterSummary.push(`EOEL Status: ${eoelStatus}`);
+      if (titleI) filterSummary.push(`Title I: ${titleI}`);
+      if (utilizationFilter) filterSummary.push(`Utilization: ${utilizationFilter}`);
+
+      const totalSchools = filteredData.length;
+      const eoelCount = filteredData.filter(s => (s['EOEL PreK'] && String(s['EOEL PreK']).toLowerCase().includes('202')) || ((parseInt(s['# EOEL Rooms'])||0)>0)).length;
+
+      emailTemplate.value = `Subject: EOEL Hawaii Early Childhood Data - Dashboard View
 
 Hi [Colleague Name],
 
 I've prepared a customized view of our EOEL Hawaii early childhood education data for your review:
 
-${applied}
+${filterSummary.length > 0 ? `Applied Filters: ${filterSummary.join(', ')}` : 'Showing all schools in dataset'}
 
 Key Summary:
 • Total Schools: ${totalSchools}
@@ -962,129 +942,128 @@ Please let me know if you need any additional analysis or have questions about t
 
 Best regards,
 EOEL Team`;
+      modal.style.display='block';
+    }
 
-  modal.style.display='block';
-}
+    function showDataTable(){
+      const modal = document.getElementById('dataTableModal');
+      const tableHead = document.getElementById('tableHead');
+      const tableBody = document.getElementById('tableBody');
+      tableHead.innerHTML=''; tableBody.innerHTML='';
 
-function showDataTable(){
-  const modal = document.getElementById('dataTableModal');
-  const tableHead = document.getElementById('tableHead');
-  const tableBody = document.getElementById('tableBody');
-  tableHead.innerHTML=''; tableBody.innerHTML='';
+      if (filteredData.length===0){
+        tableBody.innerHTML = '<tr><td colspan="100%">No data matches current filters</td></tr>';
+        modal.style.display='block'; return;
+      }
 
-  if (filteredData.length===0){
-    tableBody.innerHTML = '<tr><td colspan="100%">No data matches current filters</td></tr>';
-    modal.style.display='block'; return;
-  }
+      const headers = ['School Name','Complex Area','Complex','Grades','EOEL Program','EOEL Capacity','Title I','Utilization','Enrollment'];
+      const headerRow = document.createElement('tr');
+      headers.forEach(h=>{ const th=document.createElement('th'); th.textContent=h; headerRow.appendChild(th); });
+      tableHead.appendChild(headerRow);
 
-  const headers = ['School Name','Complex Area','Complex','Grades','EOEL Program','EOEL Capacity','Title I (≥47.2%)','Utilization','Enrollment'];
-  const headerRow = document.createElement('tr');
-  headers.forEach(h=>{ const th=document.createElement('th'); th.textContent=h; headerRow.appendChild(th); });
-  tableHead.appendChild(headerRow);
+      filteredData.forEach(s=>{
+        const hasEOEL = (s['EOEL PreK'] && String(s['EOEL PreK']).toLowerCase().includes('202')) || ((parseInt(s['# EOEL Rooms'])||0)>0);
+        const tr=document.createElement('tr');
+        tr.innerHTML = `
+          <td>${s['Name of School']||''}</td>
+          <td>${s['Complex Area']||''}</td>
+          <td>${s['Complex']||''}</td>
+          <td>${s['Grades']||''}</td>
+          <td>${hasEOEL ? '✅ Yes' : '❌ No'}</td>
+          <td>${s['Total EOEL Capacity'] || s['EOEL Capacity'] || 'N/A'}</td>
+          <td>${s['Title I (24-25)'] || 'N/A'}</td>
+          <td>${s['Site Utilization'] || 'N/A'}</td>
+          <td>${s['Current Enrollment (SY 24-25)'] || 'N/A'} / ${s['Site Capacity'] || 'N/A'}</td>`;
+        tableBody.appendChild(tr);
+      });
 
-  filteredData.forEach(s=>{
-    const hasEOEL = (s['EOEL PreK'] && s['EOEL PreK'].toLowerCase().includes('202')) || ((parseInt(s['# EOEL Rooms'])||0)>0);
-    const tr=document.createElement('tr');
-    tr.innerHTML = `
-      <td>${s['Name of School']||''}</td>
-      <td>${s['Complex Area']||''}</td>
-      <td>${s['Complex']||''}</td>
-      <td>${s['Grades']||''}</td>
-      <td>${hasEOEL ? '✅ Yes' : '❌ No'}</td>
-      <td>${s['Total EOEL Capacity'] || s['EOEL Capacity'] || 'N/A'}</td>
-      <td>${isTitleI(s) ? '✅ Yes' : '❌ No'} ${s['Title I (24-25)'] ? `(${s['Title I (24-25)']})` : ''}</td>
-      <td>${s['Site Utilization'] || 'N/A'}</td>
-      <td>${s['Current Enrollment (SY 24-25)'] || 'N/A'} / ${s['Site Capacity'] || 'N/A'}</td>`;
-    tableBody.appendChild(tr);
-  });
+      modal.style.display='block';
+    }
 
-  modal.style.display='block';
-}
+    function exportToCSV(){
+      if (!filteredData.length){ alert('No data to export. Please adjust your filters.'); return; }
+      const headers = ['Name of School','Complex Area','Complex','Grades','EOEL PreK','Total EOEL Capacity','EOEL Capacity','Title I (24-25)','Site Utilization','Current Enrollment (SY 24-25)','Site Capacity'];
+      const csv = [headers.join(','), ...filteredData.map(r => headers.map(h => `"${r[h]??''}"`).join(','))].join('\n');
+      const blob=new Blob([csv],{type:'text/csv'}); const url=URL.createObjectURL(blob); const a=document.createElement('a');
+      a.href=url; a.download=`eoel_schools_${new Date().toISOString().split('T')[0]}.csv`; a.click(); URL.revokeObjectURL(url);
+    }
 
-function exportToCSV(){
-  if (!filteredData.length){ alert('No data to export. Please adjust your filters.'); return; }
-  const headers = ['Name of School','Complex Area','Complex','Grades','EOEL PreK','Total EOEL Capacity','EOEL Capacity','Title I (24-25)','Site Utilization','Current Enrollment (SY 24-25)','Site Capacity'];
-  const csv = [headers.join(','), ...filteredData.map(r => headers.map(h => `"${r[h]??''}"`).join(','))].join('\n');
-  const blob=new Blob([csv],{type:'text/csv'}); const url=URL.createObjectURL(blob); const a=document.createElement('a');
-  a.href=url; a.download=`eoel_schools_${new Date().toISOString().split('T')[0]}.csv`; a.click(); URL.revokeObjectURL(url);
-}
+    function generateCustomReport(){
+      const boxes = document.querySelectorAll('#fieldSelector input[type="checkbox"]:checked');
+      const selected = Array.from(boxes).map(b=>b.value);
+      const reportName = document.getElementById('reportName').value || 'EOEL_Custom_Report';
+      const notes = document.getElementById('reportNotes').value;
+      if (!selected.length){ alert('Please select at least one field to include in your report.'); return; }
 
-function generateCustomReport(){
-  const boxes = document.querySelectorAll('#fieldSelector input[type="checkbox"]:checked');
-  const selected = Array.from(boxes).map(b=>b.value);
-  const reportName = document.getElementById('reportName').value || 'EOEL_Custom_Report';
-  const notes = document.getElementById('reportNotes').value;
-  if (!selected.length){ alert('Please select at least one field to include in your report.'); return; }
+      const csv = [
+        `# ${reportName}`,
+        `# Generated: ${new Date().toLocaleString()}`,
+        `# Records: ${filteredData.length}`,
+        notes ? `# Notes: ${notes}` : '',
+        '',
+        selected.join(','),
+        ...filteredData.map(r => selected.map(h => `"${r[h]??''}"`).join(','))
+      ].filter(Boolean).join('\n');
 
-  const csv = [
-    `# ${reportName}`,
-    `# Generated: ${new Date().toLocaleString()}`,
-    `# Records: ${filteredData.length}`,
-    notes ? `# Notes: ${notes}` : '',
-    '',
-    selected.join(','),
-    ...filteredData.map(r => selected.map(h => `"${r[h]??''}"`).join(','))
-  ].filter(Boolean).join('\n');
+      const blob=new Blob([csv],{type:'text/csv'}); const url=URL.createObjectURL(blob); const a=document.createElement('a');
+      a.href=url; a.download=`${reportName.replace(/\s+/g,'_')}_${new Date().toISOString().split('T')[0]}.csv`; a.click(); URL.revokeObjectURL(url);
+      closeCustomReportBuilder();
+    }
 
-  const blob=new Blob([csv],{type:'text/csv'}); const url=URL.createObjectURL(blob); const a=document.createElement('a');
-  a.href=url; a.download=`${reportName.replace(/\s+/g,'_')}_${new Date().toISOString().split('T')[0]}.csv`; a.click(); URL.revokeObjectURL(url);
-  closeCustomReportBuilder();
-}
+    function selectAllFields(){ document.querySelectorAll('#fieldSelector input[type="checkbox"]').forEach(cb=>cb.checked=true); updateSelectionSummary(); }
+    function clearAllFields(){ document.querySelectorAll('#fieldSelector input[type="checkbox"]').forEach(cb=>cb.checked=false); updateSelectionSummary(); }
+    function updateSelectionSummary(){
+      const n = document.querySelectorAll('#fieldSelector input[type="checkbox"]:checked').length;
+      document.getElementById('selectionSummary').textContent = n ? `${n} fields selected (${filteredData.length} records)` : 'No fields selected';
+    }
 
-function selectAllFields(){ document.querySelectorAll('#fieldSelector input[type="checkbox"]').forEach(cb=>cb.checked=true); updateSelectionSummary(); }
-function clearAllFields(){ document.querySelectorAll('#fieldSelector input[type="checkbox"]').forEach(cb=>cb.checked=false); updateSelectionSummary(); }
-function updateSelectionSummary(){
-  const n = document.querySelectorAll('#fieldSelector input[type="checkbox"]:checked').length;
-  document.getElementById('selectionSummary').textContent = n ? `${n} fields selected (${filteredData.length} records)` : 'No fields selected';
-}
+    function copyShareURL(){ const el=document.getElementById('shareURL'); el.select(); document.execCommand('copy'); alert('URL copied to clipboard!'); }
+    function copyEmailTemplate(){ const el=document.getElementById('emailTemplate'); el.select(); document.execCommand('copy'); alert('Email template copied to clipboard!'); }
+    function printExecutiveSummary(){ window.print(); }
 
-function copyShareURL(){ const el=document.getElementById('shareURL'); el.select(); document.execCommand('copy'); alert('URL copied to clipboard!'); }
-function copyEmailTemplate(){ const el=document.getElementById('emailTemplate'); el.select(); document.execCommand('copy'); alert('Email template copied to clipboard!'); }
-function printExecutiveSummary(){ window.print(); }
+    function closeDataTable(){ document.getElementById('dataTableModal').style.display='none'; }
+    function closeExecutiveSummary(){ document.getElementById('executiveModal').style.display='none'; }
+    function closeCustomReportBuilder(){ document.getElementById('customReportModal').style.display='none'; }
+    function closeShareModal(){ document.getElementById('shareModal').style.display='none'; }
 
-function closeDataTable(){ document.getElementById('dataTableModal').style.display='none'; }
-function closeExecutiveSummary(){ document.getElementById('executiveModal').style.display='none'; }
-function closeCustomReportBuilder(){ document.getElementById('customReportModal').style.display='none'; }
-function closeShareModal(){ document.getElementById('shareModal').style.display='none'; }
+    // ---------------- URL params -> filters ----------------
+    function loadURLParameters(){
+      const p=new URLSearchParams(window.location.search);
+      if (p.get('complexArea')) document.getElementById('complexArea').value = p.get('complexArea');
+      if (p.get('complex'))     document.getElementById('complex').value     = p.get('complex');
+      if (p.get('gradeLevel'))  document.getElementById('gradeLevel').value  = p.get('gradeLevel');
+      if (p.get('eoelStatus'))  document.getElementById('eoelStatus').value  = p.get('eoelStatus');
+      if (p.get('titleI'))      document.getElementById('titleI').value      = p.get('titleI');
+      if (p.get('utilizationFilter')) document.getElementById('utilizationFilter').value = p.get('utilizationFilter');
+      if (p.toString()) applyFilters();
+    }
 
-/* ========= URL params -> filters ========= */
-function loadURLParameters(){
-  const p=new URLSearchParams(window.location.search);
-  if (p.get('complexArea')) document.getElementById('complexArea').value = p.get('complexArea');
-  if (p.get('complex'))     document.getElementById('complex').value     = p.get('complex');
-  if (p.get('gradeLevel'))  document.getElementById('gradeLevel').value  = p.get('gradeLevel');
-  if (p.get('eoelStatus'))  document.getElementById('eoelStatus').value  = p.get('eoelStatus');
-  if (p.get('titleI'))      document.getElementById('titleI').value      = p.get('titleI');
-  if (p.get('utilizationFilter')) document.getElementById('utilizationFilter').value = p.get('utilizationFilter');
-  if (p.toString()) applyFilters();
-}
+    // ---------------- Init ----------------
+    async function initDashboard(){
+      try{
+        loadSampleData();
+        initMap();
+        populateFilters();
+        await geocodeSchools();
+        displayMarkers();
+        updateStats();
+        document.getElementById('loading').style.display='none';
+      }catch(e){
+        console.error('Error initializing dashboard:', e);
+        document.getElementById('loading').innerHTML = '<div style="color:red;">Dashboard loaded with sample data. Google Sheets integration in progress.</div>';
+      }
+    }
 
-/* ========= Init ========= */
-async function initDashboard(){
-  try{
-    loadSampleData();
-    initMap();
-    populateFilters();
-    await geocodeSchools();
-    displayMarkers();
-    updateStats();
-    document.getElementById('loading').style.display='none';
-  }catch(e){
-    console.error('Error initializing dashboard:', e);
-    document.getElementById('loading').innerHTML = '<div style="color:red;">Dashboard loaded with sample data. Google Sheets integration in progress.</div>';
-  }
-}
+    window.onclick = function(e){
+      ['dataTableModal','executiveModal','customReportModal','shareModal'].forEach(id=>{
+        const m=document.getElementById(id); if (e.target===m) m.style.display='none';
+      });
+    };
 
-window.onclick = function(e){
-  ['dataTableModal','executiveModal','customReportModal','shareModal'].forEach(id=>{
-    const m=document.getElementById(id); if (e.target===m) m.style.display='none';
-  });
-};
-
-document.addEventListener('DOMContentLoaded', function(){
-  initDashboard();
-  loadURLParameters();
-});
+    document.addEventListener('DOMContentLoaded', function(){
+      initDashboard();
+      loadURLParameters();
+    });
   </script>
 </body>
 </html>
