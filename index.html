@@ -719,7 +719,21 @@ function countUnmappedRows() {
       document.getElementById('eoelCapacity').textContent = totalEOELCapacity;
       document.getElementById('avgUtilization').textContent = avgUtilization.toFixed(1) + '%';
       document.getElementById('titleICount').textContent = titleICount;
-    }
+   // --- append a hint under "📍 Data Source" if any rows are unmapped
+const unmapped = countUnmappedRows();
+const info = document.getElementById('dataSourceInfo');
+if (info) {
+  // remove previous note (if any), then add fresh
+  const old = info.querySelector('.unmapped-note');
+  if (old) old.remove();
+  if (unmapped > 0) {
+    const note = document.createElement('div');
+    note.className = 'unmapped-note';
+    note.innerHTML = `<small>📍 ${unmapped} record(s) could not be precisely mapped (name/address missing or ambiguous).</small>`;
+    info.appendChild(note);
+  }
+}
+ }
 
     // ---------------- Executive tools ----------------
     function generateExecutiveSummary(){
