@@ -227,25 +227,36 @@
   <script>
     // ---------- Name/Address Geocoding Helpers (no sheet changes required) ----------
     function buildGeocodeQuery(row) {
-      const zip = (row['Zip Code'] || row['ZIP Code'] || '').toString().trim();
-      const zip5 = (zip.match(/\b(\d{5})\b/) || [,''])[1] || '';
-      const partsAddr = [
-        row['Street Address'],
-        row['City'],
-        'HI',
-        zip5
-      ].filter(Boolean);
-      if (partsAddr.length >= 2) return partsAddr.join(', ');
-
-      const partsByNameCity = [ row['Name of School'], row['City'], 'HI' ].filter(Boolean);
-      if (partsByNameCity.length >= 2) return partsByNameCity.join(', ');
-
-      const byNameHI = [row['Name of School'], 'Hawaii'].filter(Boolean).join(', ');
-      if (byNameHI) return byNameHI;
-
-      return zip5 || null;
-    }
-
+  // Try with the new Address field first
+  const address = (row['Address'] || '').toString().trim();
+  const city = (row['City'] || '').toString().trim();
+  const zip = (row['Zip'] || row['Zip Code'] || '').toString().trim();
+  const zip5 = (zip.match(/\b(\d{5})\b/) || [,''])[1] || '';
+  
+  // Best: Full address with city, state, zip
+  if (address && city && zip5) {
+    return `${address}, ${city}, HI ${zip5}`;
+  }
+  
+  // Good: Address with city
+  if (address && city) {
+    return `${address}, ${city}, HI`;
+  }
+  
+  // Okay: School name with city
+  const schoolName = (row['Name of School'] || '').toString().trim();
+  if (schoolName && city) {
+    return `${schoolName}, ${city}, HI`;
+  }
+  
+  // Fallback: School name with Hawaii
+  if (schoolName) {
+    return `${schoolName}, Hawaii`;
+  }
+  
+  // Last resort: Just the ZIP
+  return zip5 || null;
+}
     const MANUAL_COORD_OVERRIDES = {
       // "Exact School Name As In Sheet": { lat: 21.3069, lng: -157.8583 },
     };
@@ -301,8 +312,8 @@
     let markers = [];
 
     // ---------------- Google Sheets config ----------------
-    const SHEET_ID  = "1l8UAyei-dawrCo0RX6zhyOTm2283R0gB9MVXFjbRy_Y";
-    const SHEET_GID = "0";
+const SHEET_ID  = "1msk7j9hbMRRaTcALunbAaWlEQtV_exGWY_HoXN2Ilf8";
+const SHEET_GID = "2096704831";
     const SHEET_CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${SHEET_GID}`;
 
     // ---------------- Helpers ----------------
@@ -327,6 +338,11 @@
     const HEADER_MAP = new Map([
       ["name of school","Name of School"],
       ["school code","School Code"],
+      ["address","Address"],
+      ["city","City"],
+      ["zip","Zip"],
+      ["district","District"],
+      ["island","Island"],
       ["grades","Grades"],
       ["renovations / new builds / modular & notes","Renovations/Builds/Modular Notes"],
       ["cte","CTE"],
@@ -336,7 +352,7 @@
       ["cas (first.last@k12.hi.us)","CAS (first.last@k12.hi.us)"],
       ["principal","Principal"],
       ["principal email","Principal Email"],
-      ["zip code","Zip Code"],
+      ["zip code","Zip"],
       ["house","House"],
       ["representative","Representative"],
       ["senate","Senate"],
