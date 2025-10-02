@@ -549,7 +549,11 @@ const SHEET_GID = "1196915625";
         if (complexArea && s['Complex Area'] !== complexArea) return false;
         if (complex && s['Complex'] !== complex) return false;
         if (gradeLevel && normGrades(s['Grades']) !== gradeLevel) return false;
-        if (titleI && (s['Title I (24-25)']||"").toUpperCase() !== titleI.toUpperCase()) return false;
+        if (titleI) {
+          const frl = parseFloat(String(s['Title I (24-25)']||"").replace('%','')) || 0;
+          if (titleI.toUpperCase() === 'YES' && frl < 47.2) return false;
+          if (titleI.toUpperCase() === 'NO' && frl >= 47.2) return false;
+        }
 
         if (eoelStatus){
           const hasEOEL = (s['EOEL PreK'] && String(s['EOEL PreK']).toLowerCase().includes('202')) || ((parseInt(s['# EOEL Rooms'])||0) > 0);
@@ -585,8 +589,10 @@ const SHEET_GID = "1196915625";
     function updateStats(){
       const totalSchools = filteredData.length;
       const eoelCount = filteredData.filter(s => (s['EOEL PreK'] && String(s['EOEL PreK']).toLowerCase().includes('202')) || ((parseInt(s['# EOEL Rooms'])||0)>0)).length;
-      const titleICount = filteredData.filter(s => (s['Title I (24-25)']||"").toUpperCase()==='YES').length;
-
+      const titleICount = filteredData.filter(s => {
+        const frl = parseFloat(String(s['Title I (24-25)']||"").replace('%','')) || 0;
+        return frl >= 47.2;
+      }).length;
       const totalEOELCapacity = filteredData.reduce((sum,s)=>{
         const a = parseInt(s["EOEL Capacity"]) || 0;
         const b = parseInt(s["Total EOEL Capacity"]) || 0;
@@ -629,7 +635,10 @@ const SHEET_GID = "1196915625";
 
       const totalSchools = filteredData.length;
       const eoelCount = filteredData.filter(s => (s['EOEL PreK'] && String(s['EOEL PreK']).toLowerCase().includes('202')) || ((parseInt(s['# EOEL Rooms'])||0)>0)).length;
-      const titleICount = filteredData.filter(s => (s['Title I (24-25)']||"").toUpperCase()==='YES').length;
+      const titleICount = filteredData.filter(s => {
+        const frl = parseFloat(String(s['Title I (24-25)']||"").replace('%','')) || 0;
+        return frl >= 47.2;
+      }).length;
       const totalEOELCapacity = filteredData.reduce((sum,s)=>{
         const a=parseInt(s["EOEL Capacity"])||0; const b=parseInt(s["Total EOEL Capacity"])||0;
         return sum + (b>0?b:a);
@@ -645,7 +654,8 @@ const SHEET_GID = "1196915625";
           areaBreakdown[area].eoel++;
           areaBreakdown[area].capacity += (parseInt(s['Total EOEL Capacity'])||parseInt(s['EOEL Capacity'])||0);
         }
-        if ((s['Title I (24-25)']||"").toUpperCase()==='YES') areaBreakdown[area].titleI++;
+        const frl = parseFloat(String(s['Title I (24-25)']||"").replace('%','')) || 0;
+        if (frl >= 47.2) areaBreakdown[area].titleI++;
       });
 
       content.innerHTML = `
