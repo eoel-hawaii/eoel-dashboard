@@ -902,14 +902,7 @@ EOEL Team`;
         notes ? `# Notes: ${notes}` : '',
         '',
         selected.join(','),
-...filteredData.map(r => selected.map(h => {
-  let val = r[h] ?? '';
-  // Prevent Excel from converting grades to dates
-  if (h === 'Grades' && val) {
-    return `"=""${val}"""`; // Excel formula trick: ="K-5"
-  }
-  return `"${val}"`;
-}).join(','))
+        ...filteredData.map(r => selected.map(h => `"${r[h]??''}"`).join(','))
 
       const blob=new Blob([csv],{type:'text/csv'}); const url=URL.createObjectURL(blob); const a=document.createElement('a');
       a.href=url; a.download=`${reportName.replace(/\s+/g,'_')}_${new Date().toISOString().split('T')[0]}.csv`; a.click(); URL.revokeObjectURL(url);
