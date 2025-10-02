@@ -225,85 +225,6 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 
   <script>
-    // ---------- Name/Address Geocoding Helpers (no sheet changes required) ----------
-    function buildGeocodeQuery(row) {
-  // Try with the new Address field first
-  const address = (row['Address'] || '').toString().trim();
-  const city = (row['City'] || '').toString().trim();
-  const zip = (row['Zip'] || row['Zip Code'] || '').toString().trim();
-  const zip5 = (zip.match(/\b(\d{5})\b/) || [,''])[1] || '';
-  
-  // Best: Full address with city, state, zip
-  if (address && city && zip5) {
-    return `${address}, ${city}, HI ${zip5}`;
-  }
-  
-  // Good: Address with city
-  if (address && city) {
-    return `${address}, ${city}, HI`;
-  }
-  
-  // Okay: School name with city
-  const schoolName = (row['Name of School'] || '').toString().trim();
-  if (schoolName && city) {
-    return `${schoolName}, ${city}, HI`;
-  }
-  
-  // Fallback: School name with Hawaii
-  if (schoolName) {
-    return `${schoolName}, Hawaii`;
-  }
-  
-  // Last resort: Just the ZIP
-  return zip5 || null;
-}
-    const MANUAL_COORD_OVERRIDES = {
-      // "Exact School Name As In Sheet": { lat: 21.3069, lng: -157.8583 },
-    };
-
-    function getGeoCache(key) {
-      try { const raw = localStorage.getItem('geo:'+key); return raw ? JSON.parse(raw) : null; } catch { return null; }
-    }
-    function setGeoCache(key, coord) {
-      try { localStorage.setItem('geo:'+key, JSON.stringify(coord)); } catch {}
-    }
-
-    const NOMINATIM_BASE = 'https://nominatim.openstreetmap.org/search';
-    const USER_EMAIL = 'you@example.com';
-    let geocodeQueue = Promise.resolve();
-
-    async function geocodeNominatim(q) {
-      const cached = getGeoCache(q);
-      if (cached) return cached;
-
-      geocodeQueue = geocodeQueue.then(() => new Promise(async (resolve) => {
-        try {
-          await new Promise(r => setTimeout(r, 1100));
-          const url = `${NOMINATIM_BASE}?format=jsonv2&q=${encodeURIComponent(q)}&addressdetails=0&limit=1&email=${encodeURIComponent(USER_EMAIL)}`;
-          const res = await fetch(url, { headers: { 'Accept': 'application/json' }});
-          if (!res.ok) throw new Error(`Geocode HTTP ${res.status}`);
-          const results = await res.json();
-          if (Array.isArray(results) && results.length) {
-            const { lat, lon } = results[0];
-            const coord = { lat: parseFloat(lat), lng: parseFloat(lon) };
-            setGeoCache(q, coord);
-            resolve(coord);
-          } else {
-            resolve(null);
-          }
-        } catch {
-          resolve(null);
-        }
-      }));
-      return geocodeQueue;
-    }
-
-    // ---------------- Simple bounds check ----------------
-    function isInHawaii(lat, lng){
-      return Number.isFinite(lat) && Number.isFinite(lng)
-        && lat >= 18.8 && lat <= 22.4
-        && lng >= -160.8 && lng <= -154.5;
-    }
 
     // ---------------- Globals ----------------
     let map;
@@ -312,8 +233,8 @@
     let markers = [];
 
     // ---------------- Google Sheets config ----------------
-const SHEET_ID  = "1msk7j9hbMRRaTcALunbAaWlEQtV_exGWY_HoXN2Ilf8";
-const SHEET_GID = "2096704831";
+const SHEET_ID  = "1PfbfXioVzl0gFDypcGt-cK5vcW_2n2UwpUHrgAmz5B8";
+const SHEET_GID = "1196915625";
     const SHEET_CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${SHEET_GID}`;
 
     // ---------------- Helpers ----------------
@@ -510,70 +431,21 @@ const SHEET_GID = "2096704831";
     }
 
     // ---------------- Geocoding ----------------
-    const hawaiiZipCoords = {
-      "96701":{lat:21.3845,lng:-157.9284},"96706":{lat:21.3407,lng:-158.0515},"96707":{lat:21.3363,lng:-158.0711},
-      "96712":{lat:21.6389,lng:-158.0572},"96717":{lat:21.6877,lng:-157.9652},"96730":{lat:21.5647,lng:-157.8378},
-      "96731":{lat:21.6772,lng:-158.1058},"96734":{lat:21.4022,lng:-157.7394},"96744":{lat:21.4389,lng:-157.8583},
-      "96762":{lat:21.6447,lng:-158.0422},"96789":{lat:21.4511,lng:-158.0156},"96792":{lat:21.4389,lng:-158.1867},
-      "96815":{lat:21.2777,lng:-157.8262},"96816":{lat:21.2777,lng:-157.7408},"96817":{lat:21.3319,lng:-157.8583},
-      "96819":{lat:21.3319,lng:-157.8583},"96821":{lat:21.2777,lng:-157.7408},"96825":{lat:21.2777,lng:-157.7408},
-      "96703":{lat:21.9311,lng:-159.3617},"96705":{lat:22.0964,lng:-159.3286},"96714":{lat:22.0858,lng:-159.5019},
-      "96715":{lat:22.2011,lng:-159.4958},"96716":{lat:21.9311,lng:-159.3617},"96741":{lat:21.8847,lng:-159.3717},
-      "96746":{lat:21.9722,lng:-159.6506},"96751":{lat:21.9311,lng:-159.3617},"96754":{lat:21.9408,lng:-159.4075},
-      "96756":{lat:21.8847,lng:-159.6700},"96765":{lat:21.8847,lng:-159.6700},"96766":{lat:21.8847,lng:-159.6700},
-      "96769":{lat:21.9197,lng:-159.5036},"96796":{lat:21.9197,lng:-159.5036},"96720":{lat:19.7297,lng:-155.0890},
-      "96713":{lat:20.7886,lng:-156.0512},"96743":{lat:19.6405,lng:-155.9969},"96750":{lat:19.7297,lng:-155.0890},
-      "96740":{lat:19.7297,lng:-155.0890},"96749":{lat:19.5429,lng:-155.6659},"96755":{lat:19.5429,lng:-155.6659},
-      "96760":{lat:19.8968,lng:-155.5828},"96771":{lat:19.8968,lng:-155.5828},"96772":{lat:19.4925,lng:-155.8347},
-      "96773":{lat:19.4925,lng:-155.8347},"96774":{lat:19.5429,lng:-155.6659},"96777":{lat:19.4342,lng:-155.2711},
-      "96778":{lat:19.5429,lng:-155.6659},"96780":{lat:19.5429,lng:-155.6659},"96781":{lat:19.5429,lng:-155.6659},
-      "96783":{lat:20.0208,lng:-155.6686},"96785":{lat:19.7297,lng:-155.0890},
-      "96732":{lat:20.8893,lng:-156.4729},"96753":{lat:20.7539,lng:-156.4522},"96761":{lat:20.8783,lng:-156.6825},
-      "96768":{lat:20.8483,lng:-156.3256},"96779":{lat:20.9025,lng:-156.3647},"96790":{lat:20.7539,lng:-156.3256},
-      "96793":{lat:20.8893,lng:-156.5047},"96708":{lat:20.9222,lng:-156.3033},"96784":{lat:20.7539,lng:-156.4522},
-      "96786":{lat:20.7539,lng:-156.4522},"96787":{lat:20.9025,lng:-156.3647},"96788":{lat:20.9025,lng:-156.3647},
-      "96748":{lat:21.0985,lng:-157.0594},"96729":{lat:21.1444,lng:-157.0269},"96763":{lat:20.8283,lng:-156.9197},
-      "96770":{lat:21.1053,lng:-157.2051}
-    };
+// ---------------- Simple bounds check ----------------
+    function isInHawaii(lat, lng){
+      return Number.isFinite(lat) && Number.isFinite(lng)
+        && lat >= 18.8 && lat <= 22.4
+        && lng >= -160.8 && lng <= -154.5;
+    }
 
+    // ---------------- Geocoding (simplified - reads from Latitude/Longitude columns) ----------------
     async function geocodeSchools() {
-      const unresolved = [];
-
       for (const s of schoolsData) {
-        const ov = MANUAL_COORD_OVERRIDES[s['Name of School']];
-        if (ov && Number.isFinite(ov.lat) && Number.isFinite(ov.lng)) {
-          s.lat = ov.lat; s.lng = ov.lng; continue;
-        }
-
-        const lat = parseFloat(s['Latitude'] ?? s['Lat']);
-        const lng = parseFloat(s['Longitude'] ?? s['Lng'] ?? s['Long']);
+        const lat = parseFloat(s['Latitude']);
+        const lng = parseFloat(s['Longitude']);
         if (Number.isFinite(lat) && Number.isFinite(lng)) {
-          s.lat = lat; s.lng = lng; continue;
-        }
-
-        const q = buildGeocodeQuery(s);
-        if (q) {
-          unresolved.push({ row: s, q });
-        } else {
-          const zip = (s['Zip Code'] || s['ZIP Code'] || '').toString().trim();
-          const z5 = (zip.match(/\b(\d{5})\b/) || [,''])[1];
-          const centroid = z5 && hawaiiZipCoords[z5] ? hawaiiZipCoords[z5] : null;
-          if (centroid) { s.lat = centroid.lat; s.lng = centroid.lng; }
-          else { s.lat = null; s.lng = null; }
-        }
-      }
-
-      for (const item of unresolved) {
-        const coord = await geocodeNominatim(item.q);
-        if (coord && Number.isFinite(coord.lat) && Number.isFinite(coord.lng)) {
-          item.row.lat = coord.lat;
-          item.row.lng = coord.lng;
-        } else {
-          const zip = (item.row['Zip Code'] || item.row['ZIP Code'] || '').toString().trim();
-          const z5 = (zip.match(/\b(\d{5})\b/) || [,''])[1];
-          const centroid = z5 && hawaiiZipCoords[z5] ? hawaiiZipCoords[z5] : null;
-          if (centroid) { item.row.lat = centroid.lat; item.row.lng = centroid.lng; }
-          else { item.row.lat = null; item.row.lng = null; }
+          s.lat = lat;
+          s.lng = lng;
         }
       }
     }
