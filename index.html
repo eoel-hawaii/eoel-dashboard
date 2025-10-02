@@ -903,6 +903,7 @@ EOEL Team`;
         '',
         selected.join(','),
         ...filteredData.map(r => selected.map(h => `"${r[h]??''}"`).join(','))
+      ].filter(Boolean).join('\n');
 
       const blob=new Blob([csv],{type:'text/csv'}); const url=URL.createObjectURL(blob); const a=document.createElement('a');
       a.href=url; a.download=`${reportName.replace(/\s+/g,'_')}_${new Date().toISOString().split('T')[0]}.csv`; a.click(); URL.revokeObjectURL(url);
