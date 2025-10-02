@@ -412,6 +412,8 @@ function loadSampleData(){
         }
 
         schoolsData = cleaned;
+        console.log("First school Title I value:", schoolsData[0]['Title I (24-25)']); // ADD THIS
+        console.log("First school all data:", schoolsData[0]); // ADD THIS TOO
         filteredData = [...schoolsData];
         populateFilters();
         await geocodeSchools();
